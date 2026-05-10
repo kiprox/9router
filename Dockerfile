@@ -33,6 +33,11 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/open-sse ./open-sse
 COPY --from=builder /app/src/mitm ./src/mitm
 
+# ---> Sibling Folder <---
+COPY --from=builder /app/src/shared ./src/shared
+COPY --from=builder /app/src/lib ./src/lib
+# --------------------------------
+
 # Fix Database
 COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 COPY --from=builder /app/node_modules/sql.js/dist/sql-wasm.wasm ./node_modules/sql.js/dist/sql-wasm.wasm
