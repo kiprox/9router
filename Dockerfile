@@ -4,7 +4,7 @@
 FROM node:22-alpine AS builder
 
 WORKDIR /app
-RUN apk add --no-cache python3 make g++ curl
+RUN apk add --no-cache python3 make g++
 
 COPY package.json package-lock.json* ./
 RUN npm install
@@ -46,6 +46,9 @@ COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
 # Setup user non-root
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nextjs -u 1001
+
+# Healthcheck perlu curl or wget command
+RUN apk add --no-cache curl
 
 # Buat folder awal
 RUN mkdir -p /app/data /app/data-home
