@@ -7,7 +7,7 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++
 
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm install -g npm@latest && npm cache clean --force
 
 COPY . ./
 ENV NEXT_TELEMETRY_DISABLED=1
