@@ -4,7 +4,7 @@
 FROM node:22-alpine AS builder
 
 WORKDIR /app
-RUN apk add --no-cache python3 make g++
+RUN apk add --no-cache python3 make g++ curl
 
 COPY package.json package-lock.json* ./
 RUN npm install
@@ -42,9 +42,6 @@ COPY --from=builder /app/src/lib ./src/lib
 COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 COPY --from=builder /app/node_modules/sql.js/dist/sql-wasm.wasm ./node_modules/sql.js/dist/sql-wasm.wasm
 COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
-
-# Test install cUrl
-RUN apk add --no-cache curl
 
 # Setup user non-root
 RUN addgroup -g 1001 -S nodejs && \
