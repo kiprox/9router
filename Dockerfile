@@ -3,8 +3,6 @@
 # ==========================================
 FROM node:22-alpine AS builder
 
-RUN npm install -g npm@latest && npm cache clean --force
-
 WORKDIR /app
 RUN apk add --no-cache python3 make g++
 
