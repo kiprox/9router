@@ -85,6 +85,9 @@ On startup:
   - DNS-based interception for local tools
   - Requires encrypted password stored in DB
   - Cleanup on exit removes DNS entries
+- **Custom domain tunnel**: Cloudflare Worker in `cloudflare-worker/` provides stable public URLs like `https://r{shortId}.yourdomain.com`
+  - See `docs/CUSTOM_DOMAIN_TUNNEL.md` for setup
+  - Worker registers/temp-url rotation automatically
 
 ## open-sse Library
 
