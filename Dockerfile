@@ -3,11 +3,13 @@
 # ==========================================
 FROM node:22-alpine AS builder
 
+RUN npm install -g npm@latest && npm cache clean --force
+
 WORKDIR /app
 RUN apk add --no-cache python3 make g++
 
 COPY package.json package-lock.json* ./
-RUN npm install -g npm@latest && npm cache clean --force
+RUN npm install
 
 COPY . ./
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -42,6 +44,9 @@ COPY --from=builder /app/src/lib ./src/lib
 COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 COPY --from=builder /app/node_modules/sql.js/dist/sql-wasm.wasm ./node_modules/sql.js/dist/sql-wasm.wasm
 COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
+
+# Test install cUrl
+RUN apk add --no-cache curl
 
 # Setup user non-root
 RUN addgroup -g 1001 -S nodejs && \
