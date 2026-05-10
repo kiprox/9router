@@ -4,7 +4,10 @@
 FROM node:22-alpine AS builder
 
 WORKDIR /app
-RUN apk add --no-cache python3 make g++
+
+FROM base AS builder
+
+RUN apk --no-cache upgrade && apk --no-cache add python3 make g++ linux-headers
 
 COPY package.json package-lock.json* ./
 RUN npm install
@@ -67,4 +70,4 @@ EXPOSE 20128
 
 # Container start sebagai root, lalu entrypoint.sh menurunkannya ke nextjs
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["node", "server.js"]
+CMD ["bun", "server.js"]
