@@ -197,7 +197,6 @@ export async function spawnCloudflared(tunnelToken) {
   const child = spawn(binaryPath, ["tunnel", "run", "--dns-resolver-addrs", "1.1.1.1:53", "--token", tunnelToken], {
     detached: false,
     windowsHide: true,
-    cwd: os.tmpdir(),
     stdio: ["ignore", "pipe", "pipe"]
   });
 
@@ -292,7 +291,6 @@ export async function spawnQuickTunnel(localPort, onUrlUpdate) {
   const child = spawn(binaryPath, ["tunnel", "--url", `http://127.0.0.1:${localPort}`, "--config", configPath, "--no-autoupdate"], {
     detached: false,
     windowsHide: true,
-    cwd: os.tmpdir(),
     env: {
       ...process.env,
       TUNNEL_TRANSPORT_PROTOCOL: tunnelProtocol,
@@ -342,14 +340,12 @@ export async function spawnQuickTunnel(localPort, onUrlUpdate) {
         lastUrl = tunnelUrl;
         clearTimeout(timeout);
         cleanup();
-        console.log(`[Tunnel] cloudflared URL: ${tunnelUrl}`);
         resolve({ child, tunnelUrl });
         return;
       }
 
       // URL changed after initial connect — notify caller to re-register
       if (tunnelUrl !== lastUrl) {
-        console.log(`[Tunnel] cloudflared URL changed: ${tunnelUrl}`);
         lastUrl = tunnelUrl;
         if (onUrlUpdate) onUrlUpdate(tunnelUrl);
       }
@@ -369,7 +365,6 @@ export async function spawnQuickTunnel(localPort, onUrlUpdate) {
     child.on("exit", (code, signal) => {
       cloudflaredProcess = null;
       clearPid();
-      console.log(`[Tunnel] cloudflared exit code=${code} signal=${signal}`);
       if (!resolved) {
         resolved = true;
         clearTimeout(timeout);

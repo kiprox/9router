@@ -86,15 +86,14 @@ export async function createSqlJsAdapter(filePath) {
   }
 
   function transaction(fn) {
-    const sp = `sp_${Math.random().toString(36).slice(2)}`;
-    db.exec(`SAVEPOINT ${sp}`);
+    db.exec("BEGIN");
     try {
       const result = fn();
-      db.exec(`RELEASE ${sp}`);
+      db.exec("COMMIT");
       scheduleSave();
       return result;
     } catch (e) {
-      try { db.exec(`ROLLBACK TO ${sp}`); db.exec(`RELEASE ${sp}`); } catch {}
+      db.exec("ROLLBACK");
       throw e;
     }
   }

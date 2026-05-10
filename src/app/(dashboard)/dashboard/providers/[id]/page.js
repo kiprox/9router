@@ -936,6 +936,7 @@ export default function ProviderDetailPage() {
                   setAddConnectionError("");
                   setShowAddApiKeyModal(true);
                 }}
+                disabled={connections.length > 0}
                 className="w-full sm:w-auto"
               >
                 Add API Key
@@ -970,6 +971,11 @@ export default function ProviderDetailPage() {
               </Button>
             </div>
           </div>
+          {connections.length > 0 && (
+            <p className="text-sm text-text-muted">
+              Only one connection is allowed per compatible node. Add another node if you need more connections.
+            </p>
+          )}
         </Card>
       )}
 
@@ -1184,7 +1190,6 @@ export default function ProviderDetailPage() {
         proxyPools={proxyPools}
         error={addConnectionError}
         onSave={handleSaveApiKey}
-        onBulkDone={fetchConnections}
         onClose={() => {
           setAddConnectionError("");
           setShowAddApiKeyModal(false);

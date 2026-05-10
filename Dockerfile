@@ -1,24 +1,31 @@
-# syntax=docker/dockerfile:1.7
-ARG BUN_IMAGE=oven/bun:1.3.2-alpine
-FROM ${BUN_IMAGE} AS base
+# ==========================================
+# STAGE 1: BUILD (Menggunakan Node.js)
+# ==========================================
+FROM node:22-alpine AS builder
+
 WORKDIR /app
 
-FROM base AS builder
+# Install tools untuk compile better-sqlite3 (C++ native module)
+RUN apk add --no-cache python3 make g++
 
-RUN apk --no-cache upgrade && apk --no-cache add nodejs npm python3 make g++ linux-headers
+# Copy package files
+COPY package.json package-lock.json* ./
 
-COPY package.json ./
-RUN --mount=type=cache,target=/root/.npm \
-  npm install
+# Install dependencies (npm install aman jika tidak ada lock file)
+RUN npm install
 
+# Copy SELURUH source code
 COPY . ./
+
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-FROM ${BUN_IMAGE} AS runner
-WORKDIR /app
+# ==========================================
+# STAGE 2: RUNNER (Menggunakan Node.js)
+# ==========================================
+FROM node:22-alpine AS runner
 
-LABEL org.opencontainers.image.title="9router"
+WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=20128
@@ -26,25 +33,34 @@ ENV HOSTNAME=0.0.0.0
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATA_DIR=/app/data
 
+# Copy hasil build Next.js standalone
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/.next/standalone ./
+
+# Copy file spesifik yang tidak ikut ter-bundle otomatis oleh Next.js
 COPY --from=builder /app/open-sse ./open-sse
-# Next file tracing can omit sibling files; MITM runs server.js as a separate process.
 COPY --from=builder /app/src/mitm ./src/mitm
-# Standalone node_modules may omit deps only required by the MITM child process.
+
+# FIX DATABASE 1: Pastikan binary better-sqlite3 yang sudah di-compile ikut ke runner
+COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
+
+# FIX DATABASE 2: Bawa file WASM sql.js sebagai fallback (jika better-sqlite3 tiba-tiba error)
+COPY --from=builder /app/node_modules/sql.js/dist/sql-wasm.wasm ./node_modules/sql.js/dist/sql-wasm.wasm
+
+# Copy module lain yang dibutuhkan proses tersier (MITM)
 COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
 
-RUN mkdir -p /app/data && chown -R bun:bun /app && \
-  mkdir -p /app/data-home && chown bun:bun /app/data-home && \
-  ln -sf /app/data-home /root/.9router 2>/dev/null || true
-
-# Fix permissions at runtime (handles mounted volumes)
-RUN apk --no-cache upgrade && apk --no-cache add su-exec && \
-  printf '#!/bin/sh\nchown -R bun:bun /app/data /app/data-home 2>/dev/null\nexec su-exec bun "$@"\n' > /entrypoint.sh && \
-  chmod +x /entrypoint.sh
+# Setup user non-root dan folder data (sesuai aslinya)
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nextjs -u 1001 && \
+    mkdir -p /app/data && chown -R nextjs:nodejs /app && \
+    mkdir -p /app/data-home && chown nextjs:nodejs /app/data-home && \
+    ln -sf /app/data-home /home/nextjs/.9router 2>/dev/null || true
 
 EXPOSE 20128
 
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["bun", "server.js"]
+USER nextjs
+
+# Gunakan Node.js untuk menjalankan server, BUKAN Bun
+CMD ["node", "server.js"]

@@ -6,7 +6,7 @@ export async function POST() {
     const result = await enableTailscale();
     return NextResponse.json(result);
   } catch (error) {
-    console.error("Tailscale enable error:", error.message);
+    console.error("Tailscale enable error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
