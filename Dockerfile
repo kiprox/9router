@@ -17,7 +17,8 @@ RUN pnpm rebuild better-sqlite3 sharp
 COPY . ./
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PNPM_HOME="/root/.local/share/pnpm"
-RUN pnpm run build
+# Prevent pnpm auto-install from failing on build scripts check
+RUN echo "ignore-scripts=true" > .npmrc && pnpm run build
 
 # Flatten node_modules symlinks for runner stage (pnpm uses symlinks by default)
 RUN cp -rL node_modules /app/node_modules_flat
