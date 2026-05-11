@@ -9,7 +9,7 @@ WORKDIR /app
 RUN apk --no-cache upgrade && apk --no-cache add python3 make g++ linux-headers
 
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm install --quiet
 
 COPY . ./
 ENV NEXT_TELEMETRY_DISABLED=1
