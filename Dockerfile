@@ -10,15 +10,14 @@ RUN apk --no-cache upgrade && apk --no-cache add python3 make g++ linux-headers
 RUN corepack enable && corepack prepare pnpm@11.0.9 --activate
 
 COPY package.json pnpm-lock.yaml* ./
-# Bypass build scripts check, rebuild native modules separately
-RUN pnpm install --frozen-lockfile --ignore-scripts
-RUN pnpm rebuild better-sqlite3 sharp
+# Approve builds via CLI config, bypass runDepsStatusCheck
+RUN pnpm install --frozen-lockfile --config.only-built-dependencies="better-sqlite3,sharp,unrs-resolver"
 
 COPY . ./
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PNPM_HOME="/root/.local/share/pnpm"
-# Prevent pnpm runDepsStatusCheck from failing
-RUN printf 'only-built-dependencies=better-sqlite3,sharp,unrs-resolver\nignore-scripts=true\n' > .npmrc && pnpm run build
+ENV npm_config_only_built_dependencies="better-sqlite3,sharp,unrs-resolver"
+RUN pnpm run build
 
 # Flatten node_modules symlinks for runner stage (pnpm uses symlinks by default)
 RUN cp -rL node_modules /app/node_modules_flat
