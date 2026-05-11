@@ -2,7 +2,7 @@ import pkg from "../../../package.json" with { type: "json" };
 
 // App configuration
 export const APP_CONFIG = {
-  name: "Simata 9Router",
+  name: "Simata AI",
   description: "AI Infrastructure Management",
   version: pkg.version,
 };
