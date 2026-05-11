@@ -22,6 +22,7 @@ product
 .idea/
 
 # misc
+*:Zone.Identifier
 .DS_Store
 *.pem
 .tmp
