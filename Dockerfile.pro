@@ -10,7 +10,7 @@ COPY package.json package-lock.json* ./
 RUN npm install
 
 COPY . ./
-ENV NEXT_TELEMETRY_DISABLED=1
+
 RUN npm run build
 
 # ==========================================
@@ -44,8 +44,8 @@ COPY --from=builder /app/node_modules/sql.js/dist/sql-wasm.wasm ./node_modules/s
 COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
 
 # Setup user non-root
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nextjs -u 1001
+RUN addgroup -g 1001 -S node && \
+    adduser -S node -u 1001
 
 # Healthcheck perlu curl or wget command
 RUN apk add --no-cache curl
@@ -61,10 +61,10 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Setup symlink config user
-RUN ln -sf /app/data-home /home/nextjs/.9router 2>/dev/null || true
+RUN ln -sf /app/data-home /home/node/.9router 2>/dev/null || true
 
 EXPOSE 20128
 
-# Container start sebagai root, lalu entrypoint.sh menurunkannya ke nextjs
+# Container start sebagai root, lalu entrypoint.sh menurunkannya ke node
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["node", "server.js"]
