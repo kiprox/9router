@@ -6,8 +6,8 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 RUN apk --no-cache upgrade && apk --no-cache add python3 make g++ linux-headers
 
-# Install pnpm versi 11.0.8 (sama dengan dev environment)
-RUN corepack enable && corepack prepare pnpm@11.0.8 --activate
+# Install pnpm versi 11.0.9
+RUN corepack enable && corepack prepare pnpm@11.0.9 --activate
 
 COPY package.json pnpm-lock.yaml* ./
 # Bypass build scripts check, rebuild native modules separately
@@ -17,8 +17,8 @@ RUN pnpm rebuild better-sqlite3 sharp
 COPY . ./
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PNPM_HOME="/root/.local/share/pnpm"
-# Prevent pnpm auto-install from failing on build scripts check
-RUN echo "ignore-scripts=true" > .npmrc && pnpm run build
+# Prevent pnpm runDepsStatusCheck from failing
+RUN printf 'only-built-dependencies=better-sqlite3,sharp,unrs-resolver\nignore-scripts=true\n' > .npmrc && pnpm run build
 
 # Flatten node_modules symlinks for runner stage (pnpm uses symlinks by default)
 RUN cp -rL node_modules /app/node_modules_flat
