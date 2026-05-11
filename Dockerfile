@@ -9,7 +9,7 @@ RUN apk --no-cache upgrade && apk --no-cache add python3 make g++ linux-headers
 # Install pnpm globally
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml* ./
+COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml* .npmrc ./
 RUN pnpm install --frozen-lockfile
 
 COPY . ./
