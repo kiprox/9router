@@ -9,9 +9,10 @@ RUN apk --no-cache upgrade && apk --no-cache add python3 make g++ linux-headers
 # Install pnpm versi 11.0.8 (sama dengan dev environment)
 RUN corepack enable && corepack prepare pnpm@11.0.8 --activate
 
-COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml* .npmrc ./
-RUN pnpm install --frozen-lockfile
-RUN pnpm rebuild
+COPY package.json pnpm-lock.yaml* ./
+# Bypass build scripts check, rebuild native modules separately
+RUN pnpm install --frozen-lockfile --ignore-scripts
+RUN pnpm rebuild better-sqlite3 sharp
 
 COPY . ./
 ENV NEXT_TELEMETRY_DISABLED=1
