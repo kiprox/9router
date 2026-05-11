@@ -3,11 +3,13 @@
 # ==========================================
 FROM node:22-alpine AS builder
 
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false
+
 WORKDIR /app
 RUN apk --no-cache upgrade && apk --no-cache add python3 make g++ linux-headers
 
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm install --silent
 
 COPY . ./
 ENV NEXT_TELEMETRY_DISABLED=1
