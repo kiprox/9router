@@ -6,12 +6,19 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 RUN apk --no-cache upgrade && apk --no-cache add python3 make g++ linux-headers
 
-COPY package.json package-lock.json* ./
-RUN npm install
+# Install pnpm globally
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+COPY package.json pnpm-lock.yaml* ./
+RUN pnpm install --frozen-lockfile
 
 COPY . ./
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+ENV PNPM_HOME="/root/.local/share/pnpm"
+RUN pnpm run build
+
+# Flatten node_modules symlinks for runner stage (pnpm uses symlinks by default)
+RUN cp -rL node_modules /app/node_modules_flat
 
 # ==========================================
 # STAGE 2: RUNNER
@@ -38,10 +45,10 @@ COPY --from=builder /app/src/shared ./src/shared
 COPY --from=builder /app/src/lib ./src/lib
 # --------------------------------
 
-# Fix Database
-COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
-COPY --from=builder /app/node_modules/sql.js/dist/sql-wasm.wasm ./node_modules/sql.js/dist/sql-wasm.wasm
-COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
+# Fix Database (from flattened pnpm node_modules)
+COPY --from=builder /app/node_modules_flat/better-sqlite3 ./node_modules/better-sqlite3
+COPY --from=builder /app/node_modules_flat/sql.js/dist/sql-wasm.wasm ./node_modules/sql.js/dist/sql-wasm.wasm
+COPY --from=builder /app/node_modules_flat/node-forge ./node_modules/node-forge
 
 # Setup user non-root
 RUN addgroup -g 1001 -S nodejs && \
