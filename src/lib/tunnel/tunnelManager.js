@@ -169,9 +169,11 @@ export async function getTunnelStatus() {
   const settingsEnabled = settings.tunnelEnabled === true;
   const state = loadState();
   const shortId = state?.shortId || "";
-const publicUrl = shortId ? `https://r${shortId}.${PUBLIC_DOMAIN}` : "";
+  const tunnelUrl = state?.tunnelUrl || settings.tunnelUrl || "";
+  const running = !!tunnelUrl && isCloudflaredRunning();
+  const publicUrl = shortId ? `https://r${shortId}.${PUBLIC_DOMAIN}` : "";
 
-    const reachable = settingsEnabled && running ? readReachable(tunnelReachable, tunnelUrl) : false;
+  const reachable = settingsEnabled && running ? readReachable(tunnelReachable, tunnelUrl) : false;
 
   return {
     enabled: settingsEnabled && running,

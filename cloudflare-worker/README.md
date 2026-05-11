@@ -106,7 +106,3 @@ wrangler kv:namespace list
 wrangler deploy
 ```
 
-## Support
-
-- Issues: https://github.com/decolua/9router/issues
-- Docs: https://github.com/decolua/9router/tree/main/docs
