@@ -325,16 +325,13 @@ button {
 }
 
 /* Ensure clickable table headers show pointer cursor */
-th {
-  cursor: default;
-}
 th.cursor-pointer {
-  cursor: pointer;
+  cursor: pointer !important;
 }
 
 /* Ensure clickable table rows show pointer cursor */
 tr.cursor-pointer {
-  cursor: pointer;
+  cursor: pointer !important;
 }
 
 /* ============================================================
