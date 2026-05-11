@@ -324,6 +324,19 @@ button {
   user-select: none;
 }
 
+/* Ensure clickable table headers show pointer cursor */
+th {
+  cursor: default;
+}
+th.cursor-pointer {
+  cursor: pointer;
+}
+
+/* Ensure clickable table rows show pointer cursor */
+tr.cursor-pointer {
+  cursor: pointer;
+}
+
 /* ============================================================
    Animations
    ============================================================ */
