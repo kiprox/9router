@@ -36,19 +36,19 @@ export default {
         const { shortId, tunnelUrl } = await request.json();
 
         if (!shortId || !tunnelUrl) {
-          return JSON.error(400, 'Missing required fields: shortId and tunnelUrl', corsHeaders);
+          return jsonResponse.error(400, 'Missing required fields: shortId and tunnelUrl', corsHeaders);
         }
 
         // Validate shortId format (alphanumeric, 6 chars)
-        if (!/^[a-z0-9]{6}$/.test(shortId)) {
-          return JSON.error(400, 'Invalid shortId format. Must be 6 alphanumeric characters.', corsHeaders);
+        if (!/^[a-zA-Z0-9]{6}$/.test(shortId)) {
+          return jsonResponse.error(400, 'Invalid shortId format. Must be 6 alphanumeric characters.', corsHeaders);
         }
 
         // Validate tunnelUrl is a valid HTTPS URL
         try {
           new URL(tunnelUrl);
         } catch {
-          return JSON.error(400, 'Invalid tunnelUrl. Must be a valid URL.', corsHeaders);
+          return jsonResponse.error(400, 'Invalid tunnelUrl. Must be a valid URL.', corsHeaders);
         }
 
         // Store in KV with expiration (tunnels expire after 24 hours by default in cloudflared)
@@ -65,7 +65,7 @@ export default {
 
         console.log(`[Tunnel] Registered shortId=${shortId} tunnelUrl=${tunnelUrl}`);
 
-        return JSON.success({ 
+        return jsonResponse.success({ 
           success: true, 
           shortId, 
           tunnelUrl,
@@ -160,13 +160,13 @@ export default {
 
     } catch (error) {
       console.error('[Worker] Error:', error);
-      return JSON.error(500, `Internal server error: ${error.message}`, corsHeaders);
+      return jsonResponse.error(500, `Internal server error: ${error.message}`, corsHeaders);
     }
   }
 };
 
 // Helper JSON response object
-const JSON = {
+const jsonResponse = {
   success: (data, headers = {}) => new Response(JSON.stringify(data), {
     status: 200,
     headers: { ...headers, 'Content-Type': 'application/json' }
