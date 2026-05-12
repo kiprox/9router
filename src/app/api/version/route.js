@@ -40,6 +40,7 @@ export async function GET() {
   const latestVersion = await fetchLatestVersion();
   const currentVersion = pkg.version;
   const hasUpdate = latestVersion ? compareVersions(latestVersion, currentVersion) > 0 : false;
+  const imageSha = process.env.NEXT_PUBLIC_APP_IMAGE_SHA || null;
 
-  return Response.json({ currentVersion, latestVersion, hasUpdate });
+  return Response.json({ currentVersion, latestVersion, hasUpdate, imageSha });
 }

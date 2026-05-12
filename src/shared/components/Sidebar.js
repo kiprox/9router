@@ -444,9 +444,20 @@ function ManualUpdatePanel({ latestVersion, installCmd, copied, onCopyAndShutdow
           <Button variant="primary" fullWidth onClick={onCopyAndShutdown} disabled={isCountingDown}>
             {copied ? "✓ Copied — shutting down..." : isCountingDown ? `Shutting down in ${countdown}s` : "Copy & Shutdown"}
           </Button>
+</div>
+          )}
+          {/* Docker image update notice */}
+          {APP_CONFIG.isDockerImage && APP_CONFIG.imageSha && (
+            <div className="flex flex-col gap-1 rounded p-1 -m-1">
+              <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+                Docker image update: pull new image
+              </span>
+              <code className="text-[10px] text-blue-600/70 dark:text-blue-300/60 font-mono pl-1">
+                current: {APP_CONFIG.imageSha}
+              </code>
+            </div>
+          )}
         </div>
-      )}
-    </div>
   );
 }
 

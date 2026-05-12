@@ -5,6 +5,8 @@ export const APP_CONFIG = {
   name: "Simata AI",
   description: "AI Infrastructure Management",
   version: pkg.version,
+  imageSha: process.env.NEXT_PUBLIC_APP_IMAGE_SHA || null,
+  isDockerImage: !!process.env.NEXT_PUBLIC_APP_IMAGE_SHA,
 };
 
 // GitHub configuration
