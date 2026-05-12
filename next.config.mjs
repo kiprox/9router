@@ -8,10 +8,7 @@ const monorepoRoot = resolve(projectRoot, "..");
 const nextConfig = {
   output: "standalone",
   serverExternalPackages: ["better-sqlite3", "sql.js", "node:sqlite", "bun:sqlite"],
-  turbopack: {
-    root: projectRoot
-  },
-  outputFileTracingRoot: monorepoRoot,
+
   outputFileTracingExcludes: {
     "*": ["./app/gitbook/**/*", "./gitbook/**/*"]
   },
