@@ -2,7 +2,7 @@
 
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 
-export default function CopyButton({ value, label = "Copy link" }) {
+export default function CopyButton({ value, label = "Copy" }) {
   const { copied, copy } = useCopyToClipboard(2000);
   return (
     <button
