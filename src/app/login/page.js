@@ -154,14 +154,7 @@ export default function LoginPage() {
                   Login
                 </Button>
 
-                <p className="text-xs text-center text-text-muted mt-2">
-                  Default password is <code className="bg-sidebar px-1 rounded">123456</code>
-                </p>
-                {hasPassword === false && (
-                  <p className="text-xs text-center text-text-muted">
-                    No custom password is set yet. The default password above will work until you change it.
-                  </p>
-                )}
+
               </form>
             ) : (
               error && <p className="text-xs text-red-500">{error}</p>
