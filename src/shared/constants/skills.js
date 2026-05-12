@@ -69,31 +69,38 @@ export const SKILLS = [
   },
 ];
 
-// Fungsi ini memproses Blob, mengambil ID-nya, lalu return konten dari Githack
-export async function getSkillBlobUrl(id) {
-  // 1. Bangun URL Blob-nya terlebih dahulu
+// Jangan diubah lagi, wajib string biasa untuk keperluan UI (href, copy, dll)
+export function getSkillRawUrl(id) {
+  return `${SKILLS_RAW_BASE}/${id}/SKILL.md`;
+}
+
+// 2. KEMBALIKAN INI JUGA KE FUNGSI NORMAL (Return String URL Blob)
+export function getSkillBlobUrl(id) {
+  return `${SKILLS_BLOB_BASE}/${id}/SKILL.md`;
+}
+
+// 3. INI FUNGSI BARU YANG ANDA MAU
+// Fungsi khusus untuk convert logika Blob -> ambil ID unik -> fetch hasil generate Githack
+export async function getSkillContentFromGithack(id) {
+  // Step 1: Bangun URL Blob berdasarkan ID
   const blobUrl = `${SKILLS_BLOB_BASE}/${id}/SKILL.md`;
   
-  // 2. Convert/Ekstrak ID unik dari URL Blob tersebut 
-  // (Memecah URL dan mengambil nama folder-nya, yaitu ID uniknya)
+  // Step 2: Convert / Ekstrak ID Unik dari URL Blob tersebut
   const urlParts = blobUrl.split('/');
-  const uniqueId = urlParts[urlParts.length - 2]; 
+  const uniqueId = urlParts[urlParts.length - 2]; // Mengambil nama folder sebagai ID unik
   
-  // 3. Gunakan ID unik tadi untuk mengakses dan mengambil hasil generate dari Githack
-  const githackUrl = `${SKILLS_RAW_BASE}/${uniqueId}/SKILL.md`;
+  // Step 3: Gunakan ID unik itu untuk mengambil hasil generate dari Githack
+  const githackRawUrl = `${SKILLS_RAW_BASE}/${uniqueId}/SKILL.md`;
   
   try {
-    const response = await fetch(githackUrl);
-    
+    const response = await fetch(githackRawUrl);
     if (!response.ok) {
-      throw new Error(`Gagal mengambil data: ${response.status}`);
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
-    // 4. Return hasil generate mentah dari Githack (bukan URL-nya)
+    // Step 4: Return hasil generate mentah (teks markdown) dari Githack
     return await response.text();
-    
   } catch (error) {
-    console.error(`Gagal convert blob ${uniqueId} dari githack:`, error);
+    console.error(`Gagal fetch konten skill ${uniqueId} dari githack:`, error);
     return null;
   }
 }
