@@ -6,13 +6,17 @@ import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import {
   SKILLS,
   SKILLS_REPO_URL,
+  SKILLS_BLOB_BASE,
   getSkillRawUrl,
   getSkillBlobUrl,
-  GITHUB_API_BRANCH,
-  REPO,
-  BRANCH,
-  SKILL_PATH,
 } from "@/shared/constants/skills";
+
+// Cerdas: Kita ekstrak REPO, BRANCH, SKILL_PATH dari URL yang sudah di-export.
+// Jadi ANDA TIDAK PERLU UBAH FILE CONSTANTS SATU PUN.
+const REPO = SKILLS_REPO_URL.replace("https://github.com/", "");
+const blobPath = SKILLS_BLOB_BASE.replace(`https://github.com/${REPO}/blob/`, "");
+const [BRANCH, SKILL_PATH] = blobPath.split("/");
+const GITHUB_API_BRANCH = `https://api.github.com/repos/${REPO}/git/ref/heads/${BRANCH}`;
 
 function CopyButton({ value, label = "Copy link" }) {
   const { copied, copy } = useCopyToClipboard(2000);
@@ -91,16 +95,15 @@ export default function SkillsPage() {
         const baseUrl = `https://rawcdn.githack.com/${REPO}/${sha}/${SKILL_PATH}`;
         setGithackBaseUrl(baseUrl);
         
-        // 100% Dinamis: Cari skill yang statusnya isEntry = true dari array SKILLS
         const entrySkill = SKILLS.find((s) => s.isEntry);
         if (entrySkill) {
           setTopSkillUrl(`${baseUrl}/${entrySkill.id}/SKILL.md`);
         }
       })
       .catch(() => {
-        setGithackBaseUrl(`https://rawcdn.githack.com/${REPO}/${BRANCH}/${SKILL_PATH}`);
+        const baseUrl = `https://rawcdn.githack.com/${REPO}/${BRANCH}/${SKILL_PATH}`;
+        setGithackBaseUrl(baseUrl);
         
-        // 100% Dinamis: Cari skill yang statusnya isEntry = true dari array SKILLS
         const entrySkill = SKILLS.find((s) => s.isEntry);
         if (entrySkill) {
           setTopSkillUrl(getSkillRawUrl(entrySkill.id));
