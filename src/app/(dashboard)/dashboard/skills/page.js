@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Card, Badge } from "@/shared/components";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import {
@@ -7,6 +8,7 @@ import {
   SKILLS_REPO_URL,
   getSkillRawUrl,
   getSkillBlobUrl,
+  GITHUB_API_BRANCH,
 } from "@/shared/constants/skills";
 
 function CopyButton({ value, label = "Copy link" }) {
@@ -25,8 +27,12 @@ function CopyButton({ value, label = "Copy link" }) {
   );
 }
 
-function SkillRow({ skill }) {
-  const url = getSkillRawUrl(skill.id);
+function SkillRow({ skill, githackBaseUrl }) {
+  const blobUrl = getSkillBlobUrl(skill.id);
+  
+  // Ini yang Anda mau: Mengubah logika blob menjadi URL Githack dengan SHA di dalamnya
+  const githackUrl = `${githackBaseUrl}/${skill.id}/SKILL.md`;
+
   return (
     <div
       className={`flex items-start gap-3 p-4 rounded-[14px] border shadow-[var(--shadow-soft)] transition-colors ${
@@ -57,34 +63,63 @@ function SkillRow({ skill }) {
         </div>
         <p className="text-xs text-text-muted mt-0.5">{skill.description}</p>
         <a
-          href={getSkillBlobUrl(skill.id)}
+          href={blobUrl}
           target="_blank"
           rel="noreferrer"
           className="text-[11px] text-text-muted hover:text-primary mt-1 inline-flex items-center gap-1 break-all"
         >
-          {url}
+          {githackUrl}
           <span className="material-symbols-outlined text-[12px]">open_in_new</span>
         </a>
       </div>
 
-      <CopyButton value={url} />
+      <CopyButton value={githackUrl} />
     </div>
   );
 }
 
 export default function SkillsPage() {
+  const [githackBaseUrl, setGithackBaseUrl] = useState("");
+  const [topSkillUrl, setTopSkillUrl] = useState("");
+
+  useEffect(() => {
+    // Ambil SHA commit terbaru sekali saja saat halaman dimuat
+    fetch(GITHUB_API_BRANCH)
+      .then((res) => res.json())
+      .then((data) => {
+        const sha = data.object.sha;
+        const baseUrl = `https://rawcdn.githack.com/decolua/9router/${sha}/skills`;
+        setGithackBaseUrl(baseUrl);
+        setTopSkillUrl(`${baseUrl}/9router/SKILL.md`);
+      })
+      .catch(() => {
+        // Fallback kalau API GitHub gagal (misal rate limit)
+        setGithackBaseUrl("https://rawcdn.githack.com/decolua/9router/master/skills");
+        setTopSkillUrl(getSkillRawUrl("9router"));
+      });
+  }, []);
+
+  // Tampilkan loading sementara SHA belum didapat
+  if (!githackBaseUrl) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 text-text-muted text-sm">
+        Resolving Githack URLs...
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <Card padding="md">
         <div className="text-xs text-text-muted mb-2">Paste this to your AI:</div>
-        <div className="px-3 py-2 rounded bg-surface-2 font-mono text-[12px] text-text-main">
-          Read this skill and use it: {getSkillRawUrl("9router")}
+        <div className="px-3 py-2 rounded bg-surface-2 font-mono text-[12px] text-text-main break-all">
+          Read this skill and use it: {topSkillUrl}
         </div>
       </Card>
 
       <div className="space-y-2">
         {SKILLS.map((skill) => (
-          <SkillRow key={skill.id} skill={skill} />
+          <SkillRow key={skill.id} skill={skill} githackBaseUrl={githackBaseUrl} />
         ))}
       </div>
 
