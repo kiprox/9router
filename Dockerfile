@@ -9,7 +9,7 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++
 
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm install --silent
 
 COPY . ./
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -50,5 +50,5 @@ RUN mkdir -p /app/data /app/data-home
 
 EXPOSE 20128
 
-# Langsung jalankan sebagai root, tanpa entrypoint script
-CMD ["node", "server.js"]
+
+CMD ["sh", "-c", "echo '=== ISI FOLDER /APP ===' && ls -la /app && echo '=== SELESAI ===' && sleep 3600"]
