@@ -8,7 +8,6 @@ import {
   SKILLS_REPO_URL,
   SKILLS_BLOB_BASE,
   getSkillRawUrl,
-  getSkillBlobUrl,
 } from "@/shared/constants/skills";
 
 const REPO = SKILLS_REPO_URL.replace("https://github.com/", "");
@@ -16,7 +15,7 @@ const blobPath = SKILLS_BLOB_BASE.replace(`https://github.com/${REPO}/blob/`, ""
 const [BRANCH, SKILL_PATH] = blobPath.split("/");
 const GITHUB_API_BRANCH = `https://api.github.com/repos/${REPO}/git/ref/heads/${BRANCH}`;
 
-function CopyButton({ value, label = "Copy link" }) {
+function CopyButton({ value, label = "Copy" }) {
   const { copied, copy } = useCopyToClipboard(2000);
   return (
     <button
