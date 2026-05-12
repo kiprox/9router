@@ -9,6 +9,9 @@ import {
   getSkillRawUrl,
   getSkillBlobUrl,
   GITHUB_API_BRANCH,
+  REPO,
+  BRANCH,
+  SKILL_PATH,
 } from "@/shared/constants/skills";
 
 function CopyButton({ value, label = "Copy link" }) {
@@ -29,8 +32,6 @@ function CopyButton({ value, label = "Copy link" }) {
 
 function SkillRow({ skill, githackBaseUrl }) {
   const blobUrl = getSkillBlobUrl(skill.id);
-  
-  // Ini yang Anda mau: Mengubah logika blob menjadi URL Githack dengan SHA di dalamnya
   const githackUrl = `${githackBaseUrl}/${skill.id}/SKILL.md`;
 
   return (
@@ -83,23 +84,30 @@ export default function SkillsPage() {
   const [topSkillUrl, setTopSkillUrl] = useState("");
 
   useEffect(() => {
-    // Ambil SHA commit terbaru sekali saja saat halaman dimuat
     fetch(GITHUB_API_BRANCH)
       .then((res) => res.json())
       .then((data) => {
         const sha = data.object.sha;
-        const baseUrl = `https://rawcdn.githack.com/decolua/9router/${sha}/skills`;
+        const baseUrl = `https://rawcdn.githack.com/${REPO}/${sha}/${SKILL_PATH}`;
         setGithackBaseUrl(baseUrl);
-        setTopSkillUrl(`${baseUrl}/9router/SKILL.md`);
+        
+        // 100% Dinamis: Cari skill yang statusnya isEntry = true dari array SKILLS
+        const entrySkill = SKILLS.find((s) => s.isEntry);
+        if (entrySkill) {
+          setTopSkillUrl(`${baseUrl}/${entrySkill.id}/SKILL.md`);
+        }
       })
       .catch(() => {
-        // Fallback kalau API GitHub gagal (misal rate limit)
-        setGithackBaseUrl("https://rawcdn.githack.com/decolua/9router/master/skills");
-        setTopSkillUrl(getSkillRawUrl("9router"));
+        setGithackBaseUrl(`https://rawcdn.githack.com/${REPO}/${BRANCH}/${SKILL_PATH}`);
+        
+        // 100% Dinamis: Cari skill yang statusnya isEntry = true dari array SKILLS
+        const entrySkill = SKILLS.find((s) => s.isEntry);
+        if (entrySkill) {
+          setTopSkillUrl(getSkillRawUrl(entrySkill.id));
+        }
       });
   }, []);
 
-  // Tampilkan loading sementara SHA belum didapat
   if (!githackBaseUrl) {
     return (
       <div className="max-w-4xl mx-auto p-6 text-text-muted text-sm">
@@ -132,7 +140,7 @@ export default function SkillsPage() {
             </p>
           </div>
           <a
-            href={`${SKILLS_REPO_URL}/tree/master/skills`}
+            href={`${SKILLS_REPO_URL}/tree/${BRANCH}/${SKILL_PATH}`}
             target="_blank"
             rel="noreferrer"
             className="text-sm text-primary hover:underline inline-flex items-center gap-1"
