@@ -6,9 +6,8 @@ import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import {
   SKILLS,
   SKILLS_REPO_URL,
-  REPO,
-  BRANCH,
-  SKILL_PATH,
+  getSkillRawUrl,
+  getSkillBlobUrl,
   GITHUB_API_BRANCH,
 } from "@/shared/constants/skills";
 
@@ -29,6 +28,9 @@ function CopyButton({ value, label = "Copy link" }) {
 }
 
 function SkillRow({ skill, githackBaseUrl }) {
+  const blobUrl = getSkillBlobUrl(skill.id);
+  
+  // Ini yang Anda mau: Mengubah logika blob menjadi URL Githack dengan SHA di dalamnya
   const githackUrl = `${githackBaseUrl}/${skill.id}/SKILL.md`;
 
   return (
@@ -61,7 +63,7 @@ function SkillRow({ skill, githackBaseUrl }) {
         </div>
         <p className="text-xs text-text-muted mt-0.5">{skill.description}</p>
         <a
-          href={githackUrl}
+          href={blobUrl}
           target="_blank"
           rel="noreferrer"
           className="text-[11px] text-text-muted hover:text-primary mt-1 inline-flex items-center gap-1 break-all"
@@ -81,24 +83,23 @@ export default function SkillsPage() {
   const [topSkillUrl, setTopSkillUrl] = useState("");
 
   useEffect(() => {
+    // Ambil SHA commit terbaru sekali saja saat halaman dimuat
     fetch(GITHUB_API_BRANCH)
       .then((res) => res.json())
       .then((data) => {
         const sha = data.object.sha;
-        
-        // 100% Dinamis memakai variabel dari constants
-        const baseUrl = `https://rawcdn.githack.com/${REPO}/${sha}/${SKILL_PATH}`;
+        const baseUrl = `https://rawcdn.githack.com/decolua/9router/${sha}/skills`;
         setGithackBaseUrl(baseUrl);
-        setTopSkillUrl(`${baseUrl}/${SKILLS[0].id}/SKILL.md`);
+        setTopSkillUrl(`${baseUrl}/9router/SKILL.md`);
       })
       .catch(() => {
-        // 100% Dinamis memakai variabel dari constants
-        const baseUrl = `https://rawcdn.githack.com/${REPO}/${BRANCH}/${SKILL_PATH}`;
-        setGithackBaseUrl(baseUrl);
-        setTopSkillUrl(`${baseUrl}/${SKILLS[0].id}/SKILL.md`);
+        // Fallback kalau API GitHub gagal (misal rate limit)
+        setGithackBaseUrl("https://rawcdn.githack.com/decolua/9router/master/skills");
+        setTopSkillUrl(getSkillRawUrl("9router"));
       });
   }, []);
 
+  // Tampilkan loading sementara SHA belum didapat
   if (!githackBaseUrl) {
     return (
       <div className="max-w-4xl mx-auto p-6 text-text-muted text-sm">
@@ -131,7 +132,7 @@ export default function SkillsPage() {
             </p>
           </div>
           <a
-            href={`${SKILLS_REPO_URL}/tree/${BRANCH}/${SKILL_PATH}`}
+            href={`${SKILLS_REPO_URL}/tree/master/skills`}
             target="_blank"
             rel="noreferrer"
             className="text-sm text-primary hover:underline inline-flex items-center gap-1"
