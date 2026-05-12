@@ -7,7 +7,7 @@ const SKILL_PATH = "skills";
 
 export const SKILLS_REPO_URL = `https://github.com/${REPO}`;
 export const SKILLS_RAW_BASE = `https://rawcdn.githack.com/${REPO}/refs/heads/${BRANCH}/${SKILL_PATH}`;
-export const SKILLS_BLOB_BASE = `https://raw.githack.com/${REPO}/blob/${BRANCH}/${SKILL_PATH}`;
+export const SKILLS_BLOB_BASE = `https://github.com/${REPO}/blob/${BRANCH}/${SKILL_PATH}`;
 
 export const SKILLS = [
   {
@@ -69,10 +69,28 @@ export const SKILLS = [
   },
 ];
 
-export function getSkillRawUrl(id) {
-  return `${SKILLS_RAW_BASE}/${id}/SKILL.md`;
+// Diubah menjadi async karena ada proses fetch
+export async function getSkillBlobUrl(id) {
+  // Kita pakai SKILLS_BLOB_BASE karena ini yang mengarah ke file mentah di githack
+  const url = `${SKILLS_BLOB_BASE}/${id}/SKILL.md`;
+  
+  try {
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`Gagal mengambil data, status: ${response.status}`);
+    }
+    
+    // Return hasil generate konten (teks markdown) dari raw.githack.com
+    return await response.text();
+    
+  } catch (error) {
+    console.error(`Error fetching skill ${id}:`, error);
+    return null; // Anda bisa mengubah ini menjadi string error jika perlu
+  }
 }
 
-export function getSkillBlobUrl(id) {
-  return `${SKILLS_BLOB_BASE}/${id}/SKILL.md`;
+// Fungsi raw URL tetap dipertahankan sebagai URL string biasa (jika masih dibutuhkan di tempat lain)
+export function getSkillRawUrl(id) {
+  return `${SKILLS_RAW_BASE}/${id}/SKILL.md`;
 }
