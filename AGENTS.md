@@ -51,10 +51,10 @@ Port is hardcoded to **20128** in all scripts.
 ## Docker
 
 - Multi-stage build (builder + runner)
-- Runs as root (entrypoint.sh does not drop privileges)
+- Runs as root (entrypoint.sh does not drop privileges, despite `adduser` setup)
 - Copies `open-sse/`, `src/mitm/`, `src/shared/`, `src/lib/` into standalone output
 - Manually copies `better-sqlite3`, `sql.js`, `node-forge` node_modules for runtime
-- Data dir: `/app/data`
+- Data dir: `/app/data` (env var `DATA_DIR`); symlink for dev config at `/home/nextjs/.9router`
 - Port: 20128
 
 Build and run:
