@@ -1,8 +1,5 @@
-"use client";
-
-import { useState, useEffect } from "react";
 import { Card, Badge } from "@/shared/components";
-import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
+import CopyButton from "@/shared/components/CopyButton.client";
 import {
   SKILLS,
   SKILLS_REPO_URL,
@@ -15,20 +12,26 @@ const blobPath = SKILLS_BLOB_BASE.replace(`https://github.com/${REPO}/blob/`, ""
 const [BRANCH, SKILL_PATH] = blobPath.split("/");
 const GITHUB_API_BRANCH = `https://api.github.com/repos/${REPO}/git/ref/heads/${BRANCH}`;
 
-function CopyButton({ value, label = "Copy" }) {
-  const { copied, copy } = useCopyToClipboard(2000);
-  return (
-    <button
-      onClick={() => copy(value)}
-      className="px-2 py-1 rounded-md bg-primary text-white text-[11px] font-medium hover:bg-primary/90 transition-colors cursor-pointer shrink-0 inline-flex items-center gap-1"
-      title={value}
-    >
-      <span className="material-symbols-outlined text-[12px]">
-        {copied ? "check" : "content_copy"}
-      </span>
-      {copied ? "Copied!" : label}
-    </button>
-  );
+async function getGithackData() {
+  try {
+    const res = await fetch(GITHUB_API_BRANCH, { next: { revalidate: 3600 } });
+    if (!res.ok) throw new Error("Failed to fetch SHA");
+    
+    const data = await res.json();
+    const sha = data.object.sha;
+    const baseUrl = `https://rawcdn.githack.com/${REPO}/${sha}/${SKILL_PATH}`;
+    
+    const entrySkill = SKILLS.find((s) => s.isEntry);
+    const topSkillUrl = entrySkill ? `${baseUrl}/${entrySkill.id}/SKILL.md` : "";
+
+    return { baseUrl, topSkillUrl };
+  } catch {
+    const baseUrl = `https://rawcdn.githack.com/${REPO}/${BRANCH}/${SKILL_PATH}`;
+    const entrySkill = SKILLS.find((s) => s.isEntry);
+    const topSkillUrl = entrySkill ? getSkillRawUrl(entrySkill.id) : "";
+
+    return { baseUrl, topSkillUrl };
+  }
 }
 
 function SkillRow({ skill, githackBaseUrl }) {
@@ -79,41 +82,8 @@ function SkillRow({ skill, githackBaseUrl }) {
   );
 }
 
-export default function SkillsPage() {
-  const [githackBaseUrl, setGithackBaseUrl] = useState("");
-  const [topSkillUrl, setTopSkillUrl] = useState("");
-
-  useEffect(() => {
-    fetch(GITHUB_API_BRANCH)
-      .then((res) => res.json())
-      .then((data) => {
-        const sha = data.object.sha;
-        const baseUrl = `https://rawcdn.githack.com/${REPO}/${sha}/${SKILL_PATH}`;
-        setGithackBaseUrl(baseUrl);
-        
-        const entrySkill = SKILLS.find((s) => s.isEntry);
-        if (entrySkill) {
-          setTopSkillUrl(`${baseUrl}/${entrySkill.id}/SKILL.md`);
-        }
-      })
-      .catch(() => {
-        const baseUrl = `https://rawcdn.githack.com/${REPO}/${BRANCH}/${SKILL_PATH}`;
-        setGithackBaseUrl(baseUrl);
-        
-        const entrySkill = SKILLS.find((s) => s.isEntry);
-        if (entrySkill) {
-          setTopSkillUrl(getSkillRawUrl(entrySkill.id));
-        }
-      });
-  }, []);
-
-  if (!githackBaseUrl) {
-    return (
-      <div className="max-w-4xl mx-auto p-6 text-text-muted text-sm">
-        Resolving Githack URLs...
-      </div>
-    );
-  }
+export default async function SkillsPage() {
+  const { baseUrl: githackBaseUrl, topSkillUrl } = await getGithackData();
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
