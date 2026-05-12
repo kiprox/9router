@@ -3,6 +3,8 @@
 # ==========================================
 FROM node:22-alpine AS builder
 
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false
+
 WORKDIR /app
 RUN apk add --no-cache python3 make g++
 
