@@ -33,7 +33,6 @@ function CopyButton({ value, label = "Copy link" }) {
 }
 
 function SkillRow({ skill, githackBaseUrl }) {
-  const blobUrl = getSkillBlobUrl(skill.id);
   const githackUrl = `${githackBaseUrl}/${skill.id}/SKILL.md`;
 
   return (
@@ -66,7 +65,7 @@ function SkillRow({ skill, githackBaseUrl }) {
         </div>
         <p className="text-xs text-text-muted mt-0.5">{skill.description}</p>
         <a
-          href={blobUrl}
+          href={githackUrl}
           target="_blank"
           rel="noreferrer"
           className="text-[11px] text-text-muted hover:text-primary mt-1 inline-flex items-center gap-1 break-all"
