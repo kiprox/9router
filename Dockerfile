@@ -6,7 +6,7 @@ FROM node:22-alpine AS builder
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
 WORKDIR /app
-RUN apk add --no-cache python3 make g++
+RUN apk add --no-cache curl python3 make g++
 
 COPY package.json package-lock.json* ./
 RUN npm install --silent
@@ -15,7 +15,6 @@ COPY . ./
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-RUN echo "=== HASIL BUILD NEXT.JS ===" && ls -la /app/.next/standalone/ && echo "=== SELESAI ==="
 
 # ==========================================
 # STAGE 2: RUNNER (Super Clean, Full Root)
@@ -46,11 +45,10 @@ COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlit
 COPY --from=builder /app/node_modules/sql.js/dist/sql-wasm.wasm ./node_modules/sql.js/dist/sql-wasm.wasm
 COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
 
-RUN apk add --no-cache curl
 # Cukup buat folder data saja, tidak perlu setting user lagi
 RUN mkdir -p /app/data /app/data-home
 
 EXPOSE 20128
 
 
-CMD ["sh", "-c", "echo '=== ISI FOLDER /APP ===' && ls -la /app && echo '=== SELESAI ===' && sleep 3600"]
+CMD ["node", "server.js"]
