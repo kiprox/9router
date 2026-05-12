@@ -6,7 +6,7 @@ FROM node:22-alpine AS builder
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
 WORKDIR /app
-RUN apk add --no-cache curl python3 make g++
+RUN apk add --no-cache python3 make g++
 
 COPY package.json package-lock.json* ./
 RUN npm install --silent
@@ -44,6 +44,9 @@ COPY --from=builder /app/src/lib ./src/lib
 COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 COPY --from=builder /app/node_modules/sql.js/dist/sql-wasm.wasm ./node_modules/sql.js/dist/sql-wasm.wasm
 COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
+
+# health cek butuh ini
+RUN apk add --no-cache curl wget
 
 # Cukup buat folder data saja, tidak perlu setting user lagi
 RUN mkdir -p /app/data /app/data-home
