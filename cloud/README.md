@@ -10,7 +10,7 @@ npm install -g wrangler
 wrangler login
 
 # 2. Install dependencies
-cd app/cloud
+cd cloud
 npm install
 
 # 3. Create KV & D1, then paste IDs into wrangler.toml

@@ -22,56 +22,90 @@ fi
 
 echo "✅ wrangler is ready"
 
+# Prompt for domain
+read -p "Enter your domain (e.g., yourdomain.com): " DOMAIN
+
+if [ -z "$DOMAIN" ]; then
+    echo "❌ Error: Domain is required"
+    exit 1
+fi
+
+# Prompt for KV namespace name
+read -p "Enter KV namespace name (default: TUNNEL_KV): " KV_NAME
+KV_NAME=${KV_NAME:-TUNNEL_KV}
+
 # Create KV namespace
 echo "📦 Creating KV namespace..."
-KV_ID=$(wrangler kv:namespace create "TUNNEL_KV" 2>&1 | grep -oP '"id"\s*:\s*"\K[^"]+')
+KV_OUTPUT=$(wrangler kv:namespace create "$KV_NAME" 2>&1)
+KV_ID=$(echo "$KV_OUTPUT" | grep -oP '"id"\s*:\s*"\K[^"]+' || true)
 
 if [ -z "$KV_ID" ]; then
     echo "❌ Error: Failed to create KV namespace"
+    echo "   Output: $KV_OUTPUT"
     exit 1
 fi
 
 echo "✅ KV namespace created with ID: $KV_ID"
 
-# Update wrangler.toml with KV namespace ID
+# Setup accent: .dev and production
 echo "📝 Updating wrangler.toml..."
 cat > wrangler.toml << EOF
 name = "9router-tunnel-registration"
 main = "tunnel-register.js"
 compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
 
-# Public domain for tunnel URLs (change this to your domain)
+# Public domain for tunnel URLs
 [vars]
-PUBLIC_DOMAIN = "yourdomain.com"
+PUBLIC_DOMAIN = "$DOMAIN"
 
 # KV namespace for storing tunnel mappings
 [[kv_namespaces]]
-binding = "TUNNEL_KV"
+binding = "$KV_NAME"
 id = "$KV_ID"
 
-# Optional: Configure routing if using custom subdomain
+# Route configuration (uncomment after creating DNS record)
 # [routes]
-# pattern = "tunnel.yourdomain.com/*"
-# zone_name = "yourdomain.com"
+# pattern = "r*.$DOMAIN/*"
+# zone_name = "$DOMAIN"
+
+# Production environment
+[env.production]
+name = "9router-tunnel-registration-production"
+[env.production.vars]
+PUBLIC_DOMAIN = "$DOMAIN"
+
+# Staging environment (optional)
+[env.staging]
+name = "9router-tunnel-registration-staging"
+[env.staging.vars]
+PUBLIC_DOMAIN = "staging.$DOMAIN"
 EOF
 
 echo "✅ wrangler.toml created"
 
-# Deploy the worker
-echo "🚀 Deploying worker..."
+# Deploy worker
+echo "🚀 Deploying to worker..."
 wrangler deploy
 
 echo ""
 echo "🎉 Setup complete!"
 echo ""
 echo "📋 Next steps:"
-echo "   1. Edit wrangler.toml and set PUBLIC_DOMAIN to your actual domain"
-echo "   2. Deploy with: wrangler deploy"
-echo "   3. Add route in Cloudflare dashboard if using custom subdomain"
-echo "   4. Set PUBLIC_DOMAIN env var in your 9router Docker config:"
-echo "      PUBLIC_DOMAIN=yourdomain.com"
+echo "   1. Add DNS record in your Cloudflare DNS:"
+echo "      Type: A or CNAME"
+echo "      Name: r.$DOMAIN (or r*.$DOMAIN for wildcard)"
+echo "      Value: Your Worker URL or proxy to worker"
 echo ""
-echo "🔗 Your worker URL will be:"
-echo "   https://9router-tunnel-registration.your-subdomain.workers.dev"
+echo "   2. OR use Workers Routes in Cloudflare Dashboard:"
+echo "      Go to Workers → Your Worker → Triggers → Routes"
+echo "      Add: r*.$DOMAIN/*"
 echo ""
-echo "📚 Documentation: See DOCKER-DEPLOYMENT.md for 9router configuration"
+echo "   3. Set environment variables in 9Router Docker config:"
+echo "      PUBLIC_DOMAIN=$DOMAIN"
+echo "      TUNNEL_WORKER_URL=https://9router-tunnel-registration.$DOMAIN or worker URL"
+echo ""
+echo "   4. Test with:"
+echo "      curl https://9router-tunnel-registration.your-subdomain.workers.dev/api/health"
+echo ""
+echo "📚 Documentation: See docs/CUSTOM_DOMAIN_TUNNEL.md for detailed instructions"
