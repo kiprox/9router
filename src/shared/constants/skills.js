@@ -69,28 +69,31 @@ export const SKILLS = [
   },
 ];
 
-// Diubah menjadi async karena ada proses fetch
+// Fungsi ini memproses Blob, mengambil ID-nya, lalu return konten dari Githack
 export async function getSkillBlobUrl(id) {
-  // Kita pakai SKILLS_BLOB_BASE karena ini yang mengarah ke file mentah di githack
-  const url = `${SKILLS_BLOB_BASE}/${id}/SKILL.md`;
+  // 1. Bangun URL Blob-nya terlebih dahulu
+  const blobUrl = `${SKILLS_BLOB_BASE}/${id}/SKILL.md`;
+  
+  // 2. Convert/Ekstrak ID unik dari URL Blob tersebut 
+  // (Memecah URL dan mengambil nama folder-nya, yaitu ID uniknya)
+  const urlParts = blobUrl.split('/');
+  const uniqueId = urlParts[urlParts.length - 2]; 
+  
+  // 3. Gunakan ID unik tadi untuk mengakses dan mengambil hasil generate dari Githack
+  const githackUrl = `${SKILLS_RAW_BASE}/${uniqueId}/SKILL.md`;
   
   try {
-    const response = await fetch(url);
+    const response = await fetch(githackUrl);
     
     if (!response.ok) {
-      throw new Error(`Gagal mengambil data, status: ${response.status}`);
+      throw new Error(`Gagal mengambil data: ${response.status}`);
     }
     
-    // Return hasil generate konten (teks markdown) dari raw.githack.com
+    // 4. Return hasil generate mentah dari Githack (bukan URL-nya)
     return await response.text();
     
   } catch (error) {
-    console.error(`Error fetching skill ${id}:`, error);
-    return null; // Anda bisa mengubah ini menjadi string error jika perlu
+    console.error(`Gagal convert blob ${uniqueId} dari githack:`, error);
+    return null;
   }
-}
-
-// Fungsi raw URL tetap dipertahankan sebagai URL string biasa (jika masih dibutuhkan di tempat lain)
-export function getSkillRawUrl(id) {
-  return `${SKILLS_RAW_BASE}/${id}/SKILL.md`;
 }
