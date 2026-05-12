@@ -11,8 +11,6 @@ import {
   getSkillBlobUrl,
 } from "@/shared/constants/skills";
 
-// Cerdas: Kita ekstrak REPO, BRANCH, SKILL_PATH dari URL yang sudah di-export.
-// Jadi ANDA TIDAK PERLU UBAH FILE CONSTANTS SATU PUN.
 const REPO = SKILLS_REPO_URL.replace("https://github.com/", "");
 const blobPath = SKILLS_BLOB_BASE.replace(`https://github.com/${REPO}/blob/`, "");
 const [BRANCH, SKILL_PATH] = blobPath.split("/");
@@ -122,9 +120,14 @@ export default function SkillsPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <Card padding="md">
-        <div className="text-xs text-text-muted mb-2">Paste this to your AI:</div>
-        <div className="px-3 py-2 rounded bg-surface-2 font-mono text-[12px] text-text-main break-all">
-          Read this skill and use it: {topSkillUrl}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="min-w-0 flex-1">
+            <div className="text-xs text-text-muted mb-2">Paste this to your AI:</div>
+            <div className="px-3 py-2 rounded bg-surface-2 font-mono text-[12px] text-text-main break-all">
+              Read this skill and use it: {topSkillUrl}
+            </div>
+          </div>
+          <CopyButton value={topSkillUrl} label="Copy" />
         </div>
       </Card>
 
