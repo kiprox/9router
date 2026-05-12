@@ -59,8 +59,9 @@ export default function Sidebar({ onClose }) {
       .catch(() => {});
   }, []);
 
-  // Lazy check for new npm version on mount
+  // Lazy check for new npm version on mount (npm global install only)
   useEffect(() => {
+    if (APP_CONFIG.isDockerImage) return;
     fetch("/api/version")
       .then(res => res.json())
       .then(data => { if (data.hasUpdate) setUpdateInfo(data); })
@@ -141,7 +142,7 @@ export default function Sidebar({ onClose }) {
               <span className="text-xs text-text-muted">v{APP_CONFIG.version}</span>
             </div>
           </Link>
-          {updateInfo && (
+          {!APP_CONFIG.isDockerImage && updateInfo && (
             <div className="flex flex-col gap-1.5 rounded p-1 -m-1">
               <span className="text-xs font-semibold text-green-600 dark:text-amber-500">
                 ↑ New version available: v{updateInfo.latestVersion}
@@ -328,16 +329,18 @@ export default function Sidebar({ onClose }) {
 
         {/* Footer section */}
         <div className="p-3 border-t border-border-subtle">
-          {/* Shutdown button */}
-          <Button
-            variant="outline"
-            fullWidth
-            icon="power_settings_new"
-            onClick={() => setShowShutdownModal(true)}
-            className="text-red-500 border-red-200 hover:bg-red-50 hover:border-red-300"
-          >
-            Shutdown
-          </Button>
+          {!APP_CONFIG.isDockerImage && (
+            /* Shutdown button */
+            <Button
+              variant="outline"
+              fullWidth
+              icon="power_settings_new"
+              onClick={() => setShowShutdownModal(true)}
+              className="text-red-500 border-red-200 hover:bg-red-50 hover:border-red-300"
+            >
+              Shutdown
+            </Button>
+          )}
         </div>
       </aside>
 

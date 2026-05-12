@@ -6,12 +6,13 @@ FROM node:22-alpine AS builder
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
 WORKDIR /app
-RUN apk add --no-cache python3 make g++ git
+RUN apk add --no-cache python3 make g++
 
 COPY package.json package-lock.json* ./
 RUN npm install --silent
 
 COPY . ./
+
 ARG IMAGE_SHA
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PUBLIC_APP_IMAGE_SHA=${IMAGE_SHA}
@@ -47,8 +48,8 @@ COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlit
 COPY --from=builder /app/node_modules/sql.js/dist/sql-wasm.wasm ./node_modules/sql.js/dist/sql-wasm.wasm
 COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
 
-# health cek butuh ini
-RUN apk add --no-cache curl wget
+# healthy check & docker updater
+RUN apk add --no-cache curl wget git
 
 # Cukup buat folder data saja, tidak perlu setting user lagi
 RUN mkdir -p /app/data /app/data-home
