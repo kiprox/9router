@@ -7,7 +7,7 @@ const SKILL_PATH = "skills";
 
 export const SKILLS_REPO_URL = `https://github.com/${REPO}`;
 export const SKILLS_RAW_BASE = `https://rawcdn.githack.com/${REPO}/refs/heads/${BRANCH}/${SKILL_PATH}`;
-export const SKILLS_BLOB_BASE = `https://github.com/${REPO}/blob/${BRANCH}/${SKILL_PATH}`;
+export const SKILLS_BLOB_BASE = `https://raw.githack.com/${REPO}/blob/${BRANCH}/${SKILL_PATH}`;
 
 export const SKILLS = [
   {
