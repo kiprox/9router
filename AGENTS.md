@@ -39,7 +39,7 @@ Port is hardcoded to **20128** in all scripts.
 
 ## Database Layer
 
-**3-tier fallback**: better-sqlite3 → node:sqlite (Node ≥22.5) → sql.js (WASM)
+**4-tier fallback**: bun:sqlite (Bun) → better-sqlite3 → node:sqlite (Node ≥22.5) → sql.js (WASM)
 
 - Driver selection happens at runtime in `src/lib/db/driver.js`
 - Migrations in `src/lib/db/migrations/`
@@ -69,11 +69,11 @@ docker run -d --name 9router -p 20128:20128 --env-file .env -v 9router-data:/app
 
 `src/server-init.js` → `src/shared/services/initializeApp.js`
 
-On startup:
+On startup (`src/server-init.js` -> `src/shared/services/initializeApp.js`):
 1. Cleans up stale provider connections
 2. Auto-resumes tunnel (Cloudflare) if `tunnelEnabled` in settings
 3. Auto-resumes Tailscale if `tailscaleEnabled` in settings
-4. Registers signal handlers (SIGINT/SIGTERM) to cleanup DNS entries and kill cloudflared
+4. Registers signal handlers (SIGINT/SIGTERM) to cleanup DNS entries, kill cloudflared
 5. Starts MITM proxy if enabled
 6. Starts watchdog and network monitor intervals
 
