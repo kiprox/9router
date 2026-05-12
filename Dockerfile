@@ -15,6 +15,8 @@ COPY . ./
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
+RUN echo "=== HASIL BUILD NEXT.JS ===" && ls -la /app/.next/standalone/ && echo "=== SELESAI ==="
+
 # ==========================================
 # STAGE 2: RUNNER (Super Clean, Full Root)
 # ==========================================
