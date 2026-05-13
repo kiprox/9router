@@ -45,6 +45,8 @@ COPY --from=builder /app/src/lib ./src/lib
 COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 COPY --from=builder /app/node_modules/sql.js/dist/sql-wasm.wasm ./node_modules/sql.js/dist/sql-wasm.wasm
 COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
+# Ensure `next` is available at runtime in case tracing did not include it.
+COPY --from=builder /app/node_modules/next ./node_modules/next
 
 # healthy check & docker updater
 RUN apk add --no-cache curl wget git
