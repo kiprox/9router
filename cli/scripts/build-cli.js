@@ -111,23 +111,15 @@ if (fs.existsSync(cliAppDir)) {
 console.log("✅ Cleaned\n");
 
 // Step 3: Copy Next.js standalone build to app/cli/app.
-// With outputFileTracingRoot = workspace root, Next places app files under
-// .next/standalone/app/ and traced node_modules under .next/standalone/node_modules/.
+// With outputFileTracingRoot = projectRoot, server.js + node_modules live flat under .next/standalone/.
 console.log("3️⃣  Copying Next.js standalone build to app/cli/app...");
 const standaloneRoot = path.join(appDir, ".next", "standalone");
-const standaloneApp = path.join(standaloneRoot, "app");
-if (!fs.existsSync(standaloneApp)) {
-  console.error("❌ Next.js standalone build not found at .next/standalone/app");
+if (!fs.existsSync(path.join(standaloneRoot, "server.js"))) {
+  console.error("❌ Next.js standalone build not found at .next/standalone/server.js");
   console.error("Make sure output: 'standalone' is set in next.config.js");
   process.exit(1);
 }
-copyRecursive(standaloneApp, cliAppDir);
-
-// Copy traced node_modules from standalone root into CLI bundle
-const standaloneNodeModules = path.join(standaloneRoot, "node_modules");
-if (fs.existsSync(standaloneNodeModules)) {
-  copyRecursive(standaloneNodeModules, path.join(cliAppDir, "node_modules"));
-}
+copyRecursive(standaloneRoot, cliAppDir);
 console.log("✅ Copied standalone build\n");
 
 // Step 3b: Ensure sql.js (pure JS fallback) bundled in app/cli/app/node_modules.
