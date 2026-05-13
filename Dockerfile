@@ -6,10 +6,10 @@ FROM node:22-alpine AS builder
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
 WORKDIR /app
-RUN apk add --no-cache python3 make g++
+RUN apk add --no-cache python3 make g++ linux-headers
 
 COPY package.json package-lock.json* ./
-RUN npm install --silent
+RUN npm install
 
 COPY . ./
 
@@ -30,7 +30,7 @@ ENV HOSTNAME=0.0.0.0
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATA_DIR=/app/data
 
-# Copy hasil build
+# Copy hasil build Next.js (Termasuk server.js)
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/.next/standalone ./
@@ -48,6 +48,17 @@ COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
 # Ensure `next` is available at runtime in case tracing did not include it.
 COPY --from=builder /app/node_modules/next ./node_modules/next
 
+# Setup user non-root (sebagai cadangan jika tidak butuh root)
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nextjs -u 1001 && \
+    mkdir -p /app/data /app/data-home
+
+# Install su-exec dan ambil entrypoint.sh
+RUN apk --no-cache add su-exec curl
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+RUN ln -sf /app/data-home /home/nextjs/.9router 2>/dev/null || true
 # healthy check & docker updater
 RUN apk add --no-cache curl wget git
 
@@ -56,4 +67,5 @@ RUN mkdir -p /app/data /app/data-home
 
 EXPOSE 20128
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["node", "server.js"]
