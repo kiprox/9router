@@ -13,5 +13,7 @@ export const config = {
     "/api/providers/:path*",
     "/api/providers/client",
     "/api/provider-nodes/validate",
+    "/api/cli-tools/:path*",
+    "/api/mcp/:path*",
   ],
 };
