@@ -9,7 +9,7 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++ linux-headers
 
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm install --silent
 
 COPY . ./
 
@@ -54,7 +54,7 @@ RUN addgroup -g 1001 -S nodejs && \
     mkdir -p /app/data /app/data-home
 
 # Install su-exec dan ambil entrypoint.sh
-RUN apk --no-cache add su-exec curl
+RUN apk --no-cache add su-exec
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
