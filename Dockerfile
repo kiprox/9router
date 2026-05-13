@@ -56,5 +56,4 @@ RUN mkdir -p /app/data /app/data-home
 
 EXPOSE 20128
 
-
 CMD ["node", "server.js"]
