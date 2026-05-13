@@ -44,6 +44,8 @@ export default function Sidebar({ onClose }) {
   const [isShuttingDown, setIsShuttingDown] = useState(false);
   const [isDisconnected, setIsDisconnected] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
+  const [isDockerImage, setIsDockerImage] = useState(APP_CONFIG.isDockerImage);
+  const [imageSha, setImageSha] = useState(APP_CONFIG.imageSha);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [shutdownCountdown, setShutdownCountdown] = useState(0);
@@ -65,6 +67,8 @@ export default function Sidebar({ onClose }) {
       .then(res => res.json())
       .then(data => {
         if (data?.hasUpdate) setUpdateInfo(data);
+        setIsDockerImage(data?.isDockerImage ?? APP_CONFIG.isDockerImage);
+        setImageSha(data?.imageSha ?? APP_CONFIG.imageSha);
       })
       .catch(() => {});
   }, []);
@@ -143,7 +147,7 @@ export default function Sidebar({ onClose }) {
               <span className="text-xs text-text-muted">v{APP_CONFIG.version}</span>
             </div>
           </Link>
-          {!APP_CONFIG.isDockerImage && updateInfo && (
+          {!isDockerImage && updateInfo && (
             <div className="flex flex-col gap-1.5 rounded p-1 -m-1">
               <span className="text-xs font-semibold text-green-600 dark:text-amber-500">
                 ↑ New version available: v{updateInfo.latestVersion}
@@ -167,7 +171,7 @@ export default function Sidebar({ onClose }) {
               </div>
             </div>
           )}
-          {APP_CONFIG.isDockerImage && updateInfo?.dockerInfo && (
+          {isDockerImage && updateInfo?.dockerInfo && (
             <button
               onClick={() => copy(updateInfo.dockerInfo.pullCommand)}
               title="Copy Docker pull command"
@@ -349,7 +353,7 @@ export default function Sidebar({ onClose }) {
 
         {/* Footer section */}
         <div className="p-3 border-t border-border-subtle">
-          {!APP_CONFIG.isDockerImage && (
+          {!isDockerImage && (
             /* Shutdown button */
             <Button
               variant="outline"
@@ -470,7 +474,7 @@ function ManualUpdatePanel({ latestVersion, installCmd, copied, onCopyAndShutdow
 </div>
           )}
           {/* Docker image update notice */}
-          {APP_CONFIG.isDockerImage && APP_CONFIG.imageSha && (
+          {isDockerImage && imageSha && (
             <div className="flex flex-col gap-1 rounded p-1 -m-1">
               <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
                 Docker image update: pull new image
