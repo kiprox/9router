@@ -12,6 +12,7 @@ COPY package.json package-lock.json* ./
 RUN npm install --silent
 
 COPY . ./
+
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
@@ -45,8 +46,8 @@ COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlit
 COPY --from=builder /app/node_modules/sql.js/dist/sql-wasm.wasm ./node_modules/sql.js/dist/sql-wasm.wasm
 COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
 
-# health cek butuh ini
-RUN apk add --no-cache curl wget
+# healthy check & docker updater
+RUN apk add --no-cache curl wget git
 
 # Cukup buat folder data saja, tidak perlu setting user lagi
 RUN mkdir -p /app/data /app/data-home
