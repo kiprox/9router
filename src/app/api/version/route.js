@@ -25,12 +25,12 @@ async function fetchLatestVersion() {
   return data?.version || null;
 }
 
-async function fetchDockerTagInfo() {
-  const data = await fetchJson(`https://hub.docker.com/v2/repositories/${DOCKERHUB_REPO}/tags/${DOCKERHUB_TAG}`);
+async function fetchDockerTagInfo(tag = DOCKERHUB_TAG) {
+  const data = await fetchJson(`https://hub.docker.com/v2/repositories/${DOCKERHUB_REPO}/tags/${tag}`);
   const digest = data?.images?.find((image) => image.digest)?.digest || null;
   return data ? {
     repo: DOCKERHUB_REPO,
-    tag: DOCKERHUB_TAG,
+    tag,
     digest,
     digestShort: digest ? digest.replace(/^sha256:/, "").slice(0, 12) : null,
     lastUpdated: data.last_updated || null,
@@ -49,19 +49,49 @@ function compareVersions(a, b) {
 }
 
 export async function GET() {
-  const [latestVersion, dockerInfo] = await Promise.all([fetchLatestVersion(), fetchDockerTagInfo()]);
-  const rawImageSha = process.env.NEXT_PUBLIC_APP_IMAGE_SHA || process.env.SOURCE_COMMIT || null;
+  const [latestVersion, dockerInfo, rawImageSha] = await Promise.all([
+    fetchLatestVersion(),
+    fetchDockerTagInfo(DOCKERHUB_TAG),
+    Promise.resolve(process.env.NEXT_PUBLIC_APP_IMAGE_SHA || process.env.SOURCE_COMMIT || null),
+  ]);
+  
   const currentVersion = pkg.version;
-  const hasUpdate = latestVersion ? compareVersions(latestVersion, currentVersion) > 0 : false;
   const imageSha = rawImageSha ? String(rawImageSha).slice(0, 7) : null;
   const isDockerImage = !!rawImageSha;
+  let hasNpmUpdate = latestVersion ? compareVersions(latestVersion, currentVersion) > 0 : false;
+  
+  let dockerUpdate = null;
+  if (isDockerImage && dockerInfo && dockerInfo.digestShort) {
+    // Check if current image SHA (which acts as tag) matches Docker Hub's stable digest
+    const shaFull = String(rawImageSha);
+    // Try to match: either if sha is already digest format, or if it's a short commit SHA being used as tag
+    // Compare dockerInfo.digestShort against shaFull (checking if sha contains digest or vice versa)
+    const shaMatches = shaFull.replace(/^sha256:/, "").slice(0, 12) === dockerInfo.digestShort ||
+                       dockerInfo.digestShort.startsWith(shaFull.replace(/^sha256:/, ""));
+    // If SHA is also a Docker tag, try fetching that specific tag
+    if (!shaMatches && shaFull.length === 40) {
+      // Likely a commit SHA used as Docker tag, try to fetch that tag
+      const shaTagInfo = await fetchDockerTagInfo(shaFull);
+      if (shaTagInfo && shaTagInfo.digest) {
+        const shaDigestFull = shaTagInfo.digest.replace(/^sha256:/, "");
+        const stableDigestFull = dockerInfo.digest.replace(/^sha256:/, "");
+        hasNpmUpdate = false; // For docker, compare image digests
+        dockerUpdate = !shaDigestFull.startsWith(stableDigestFull.slice(0, 12)) || !stableDigestFull.startsWith(shaDigestFull.slice(0, 12));
+      }
+    } else {
+      dockerUpdate = !shaMatches;
+    }
+  }
+  
+  const hasUpdate = hasNpmUpdate || dockerUpdate;
 
   return Response.json({ 
     currentVersion, 
     latestVersion, 
-    hasUpdate, 
-    imageSha,
+    hasUpdate,
     isDockerImage,
-    dockerInfo 
+    imageSha,
+    dockerInfo,
+    shaTag: rawImageSha
   });
 }
