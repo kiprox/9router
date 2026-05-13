@@ -12,7 +12,7 @@
 
 # testing
 /coverage
-cloudflare/*
+/cloudflare
 Dockerfile.dev
 
 # next.js

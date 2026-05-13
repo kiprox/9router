@@ -2,28 +2,40 @@ import https from "https";
 import pkg from "../../../../package.json" with { type: "json" };
 
 const NPM_PACKAGE_NAME = "9router";
+const DOCKERHUB_REPO = "simata/9router";
+const DOCKERHUB_TAG = "stable";
 
-// Fetch latest version from npm registry
-function fetchLatestVersion() {
+function fetchJson(url) {
   return new Promise((resolve) => {
-    const req = https.get(
-      `https://registry.npmjs.org/${NPM_PACKAGE_NAME}/latest`,
-      { timeout: 4000 },
-      (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
-          try {
-            resolve(JSON.parse(data).version || null);
-          } catch {
-            resolve(null);
-          }
-        });
-      }
-    );
+    const req = https.get(url, { timeout: 4000 }, (res) => {
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => {
+        try { resolve(JSON.parse(data)); } catch { resolve(null); }
+      });
+    });
     req.on("error", () => resolve(null));
     req.on("timeout", () => { req.destroy(); resolve(null); });
   });
+}
+
+// Fetch latest version from npm registry
+async function fetchLatestVersion() {
+  const data = await fetchJson(`https://registry.npmjs.org/${NPM_PACKAGE_NAME}/latest`);
+  return data?.version || null;
+}
+
+async function fetchDockerTagInfo() {
+  const data = await fetchJson(`https://hub.docker.com/v2/repositories/${DOCKERHUB_REPO}/tags/${DOCKERHUB_TAG}`);
+  const digest = data?.images?.find((image) => image.digest)?.digest || null;
+  return data ? {
+    repo: DOCKERHUB_REPO,
+    tag: DOCKERHUB_TAG,
+    digest,
+    digestShort: digest ? digest.replace(/^sha256:/, "").slice(0, 12) : null,
+    lastUpdated: data.last_updated || null,
+    pullCommand: `docker pull ${DOCKERHUB_REPO}:${DOCKERHUB_TAG}`,
+  } : null;
 }
 
 function compareVersions(a, b) {
@@ -37,11 +49,19 @@ function compareVersions(a, b) {
 }
 
 export async function GET() {
-  const latestVersion = await fetchLatestVersion();
+  const [latestVersion, dockerInfo] = await Promise.all([fetchLatestVersion(), fetchDockerTagInfo()]);
+  const rawImageSha = process.env.NEXT_PUBLIC_APP_IMAGE_SHA || process.env.SOURCE_COMMIT || null;
   const currentVersion = pkg.version;
   const hasUpdate = latestVersion ? compareVersions(latestVersion, currentVersion) > 0 : false;
-  const rawImageSha = process.env.NEXT_PUBLIC_APP_IMAGE_SHA || process.env.SOURCE_COMMIT || null;
   const imageSha = rawImageSha ? String(rawImageSha).slice(0, 7) : null;
+  const isDockerImage = !!rawImageSha;
 
-  return Response.json({ currentVersion, latestVersion, hasUpdate, imageSha });
+  return Response.json({ 
+    currentVersion, 
+    latestVersion, 
+    hasUpdate, 
+    imageSha,
+    isDockerImage,
+    dockerInfo 
+  });
 }

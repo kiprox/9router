@@ -59,12 +59,17 @@ export default function Sidebar({ onClose }) {
       .catch(() => {});
   }, []);
 
-  // Lazy check for new npm version on mount (npm global install only)
+  // Lazy check for update info on mount
   useEffect(() => {
-    if (APP_CONFIG.isDockerImage) return;
     fetch("/api/version")
       .then(res => res.json())
-      .then(data => { if (data.hasUpdate) setUpdateInfo(data); })
+      .then(data => {
+        if (APP_CONFIG.isDockerImage) {
+          if (data?.dockerInfo) setUpdateInfo(data);
+          return;
+        }
+        if (data?.hasUpdate) setUpdateInfo(data);
+      })
       .catch(() => {});
   }, []);
 
@@ -165,6 +170,25 @@ export default function Sidebar({ onClose }) {
                 </button>
               </div>
             </div>
+          )}
+          {APP_CONFIG.isDockerImage && updateInfo?.dockerInfo && (
+            <button
+              onClick={() => copy(updateInfo.dockerInfo.pullCommand)}
+              title="Copy Docker pull command"
+              className="flex flex-col gap-1 rounded p-1 -m-1 text-left hover:bg-surface-2 transition-colors cursor-pointer"
+            >
+              <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+                Docker image: {updateInfo.dockerInfo.repo}:{updateInfo.dockerInfo.tag}
+              </span>
+              <code className="text-[10px] text-blue-600/70 dark:text-blue-300/60 font-mono truncate">
+                {copied ? "✓ copied!" : updateInfo.dockerInfo.pullCommand}
+              </code>
+              {updateInfo.dockerInfo.digestShort && (
+                <span className="text-[10px] text-text-muted">
+                  latest digest: {updateInfo.dockerInfo.digestShort}
+                </span>
+              )}
+            </button>
           )}
         </div>
 
