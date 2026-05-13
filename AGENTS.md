@@ -1,9 +1,11 @@
 # AGENTS.md
 
-## What this repo is
+## Repo shape
 
-- Next.js app (React 19) + API gateway/dashboard. Entry: `src/server-init.js` → `src/shared/services/initializeApp.js`.
-- `open-sse/` separate provider/translator lib, imported via alias `open-sse/*` (`jsconfig.json`).
+- Root: Next.js app (React 19) + API gateway/dashboard. Startup: `src/server-init.js` → `src/shared/services/initializeApp.js`.
+- `open-sse/`: provider/translator lib; import via alias `open-sse/*` (`jsconfig.json`).
+- `gitbook/`: separate Next.js docs app; CI builds from `gitbook/` only.
+- `cli/`: published npm CLI (different package.json, own build scripts).
 
 ## Commands (don’t guess)
 
@@ -19,33 +21,31 @@ npm run start:bun  # runs ./.next/standalone/server.js
 npx eslint .
 ```
 
-- Port **20128** hardcoded in scripts + many defaults; change requires code edits, not env.
-- No repo-defined `npm test` script, but `.github/workflows/npm-publish.yml` runs `npm test` (CI will fail unless workflow updated or script added).
+- No root `npm test` script, but `.github/workflows/npm-publish.yml` runs `npm test`.
+- Port `20128` hardcoded in scripts (also Dockerfile env). Changing port needs code/script edits.
 
-## Runtime wiring (high-signal entrypoints)
+## Runtime wiring / gotchas
 
-- Startup orchestration: `src/shared/services/initializeApp.js`
-- injects `process.env.MITM_SERVER_PATH` if missing
-- auto-resume tunnel/tailscale once per process based on DB settings
-- registers SIGINT/SIGTERM cleanup (DNS + cloudflared)
-- Tunnel: `src/lib/tunnel/tunnelManager.js` + `src/lib/tunnel/cloudflared.js`
-- public URL uses `PUBLIC_DOMAIN` or `TUNNEL_PUBLIC_DOMAIN` (default `9router.com`)
-- worker endpoint `TUNNEL_WORKER_URL` (default `https://9router.com`)
-- MITM: `src/mitm/manager.js` (CJS) spawns `src/mitm/server.js`
-- server controlled by env passed at spawn: `ROUTER_API_KEY`, `MITM_ROUTER_BASE`
+- Next output `standalone` (`next.config.mjs`). Dockerfile copies extra dirs into runtime: `open-sse/`, `src/mitm/`, `src/shared/`, `src/lib/`.
+- Rewrites in `next.config.mjs`: `/v1/*` and `/codex/*` map into `/api/v1/*` (note duplicate `/v1/v1/*` rules).
+- `initializeApp` uses global singleton to survive Next dev hot reload; registers SIGINT/SIGTERM cleanup (DNS + cloudflared).
 
-## DB layer gotchas
+## DB + data dir
 
-- SQLite driver fallback order (runtime): bun sqlite → better-sqlite3 (optional dep) → node:sqlite → sql.js.
-- Selector: `src/lib/db/driver.js`.
-- Data dir resolved from `DATA_DIR` (else `~/.9router` or `%APPDATA%\9router`). Logic duplicated in `src/lib/dataDir.js` + `src/mitm/paths.js`.
+- SQLite driver order (`src/lib/db/driver.js`):
+  - Bun: `bun:sqlite` → `sql.js`
+  - Node: `better-sqlite3` (optional dep) → `node:sqlite` (Node ≥22.5) → `sql.js`
+- Data dir: `DATA_DIR` else `~/.9router` (or `%APPDATA%\9router`); fallback to default if `DATA_DIR` not writable (`src/lib/dataDir.js`).
 
-## Docker quirks
+## MITM / tunnel
 
-- `next.config.mjs` sets `output: "standalone"`; Dockerfile copies extra dirs into standalone output: `open-sse/`, `src/mitm/`, `src/shared/`, `src/lib/`.
-- Container defaults: `PORT=20128`, `DATA_DIR=/app/data` (`Dockerfile`).
+- MITM manager is CJS: `src/mitm/manager.js` spawns `src/mitm/server.js`; ESM bootstrap injects `process.env.MITM_SERVER_PATH` in `src/shared/services/initializeApp.js`.
+- Tunnel: `src/lib/tunnel/tunnelManager.js` + `src/lib/tunnel/cloudflared.js`.
+- Public URL domain: `PUBLIC_DOMAIN` or `TUNNEL_PUBLIC_DOMAIN` (default `9router.com`).
+- Worker endpoint: `TUNNEL_WORKER_URL` (default `https://9router.com`).
 
-## CI/release signals
+## CI/release
 
-- Docker image publish on git tag `v*`: `.github/workflows/docker-publish.yml`.
-- NPM publish on GitHub Release create: `.github/workflows/npm-publish.yml`.
+- Docker image publish on tag `v*`: `.github/workflows/docker-publish.yml`.
+- GitBook deploy on push to main/master touching `gitbook/**`: `.github/workflows/gitbook-pages.yml`.
+- NPM publish on GitHub Release created: `.github/workflows/npm-publish.yml`.
