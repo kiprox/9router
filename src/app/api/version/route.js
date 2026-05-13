@@ -58,7 +58,7 @@ export async function GET() {
   const currentVersion = pkg.version;
   const imageSha = rawImageSha ? String(rawImageSha).slice(0, 7) : null;
   const isDockerImage = !!rawImageSha;
-  let hasNpmUpdate = latestVersion ? compareVersions(latestVersion, currentVersion) > 0 : false;
+  let hasNpmUpdate = !isDockerImage && latestVersion ? compareVersions(latestVersion, currentVersion) > 0 : false;
   
   let dockerUpdate = false;
   if (isDockerImage && dockerInfo && dockerInfo.digest) {
