@@ -21,7 +21,7 @@ import {
   OPENAI_COMPATIBLE_PREFIX,
   ANTHROPIC_COMPATIBLE_PREFIX,
 } from "@/shared/constants/providers";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { getErrorCode, getRelativeTime } from "@/shared/utils";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useHeaderSearchStore } from "@/store/headerSearchStore";
@@ -97,7 +97,6 @@ function getConnectionErrorTag(connection) {
 const APIKEY_INITIAL_VISIBLE = 20;
 
 export default function ProvidersPage() {
-  const router = useRouter();
   const [connections, setConnections] = useState([]);
   const [providerNodes, setProviderNodes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -592,7 +591,6 @@ export default function ProvidersPage() {
 }
 
 function ProviderCard({ providerId, provider, stats, authType, onToggle }) {
-  const router = useRouter();
   const { connected, error, errorCode, errorTime, allDisabled } = stats;
   const isNoAuth = !!provider.noAuth;
 
@@ -610,7 +608,7 @@ function ProviderCard({ providerId, provider, stats, authType, onToggle }) {
   };
 
   return (
-    <div className="group min-w-0" onClick={() => router.push(`/dashboard/providers/${providerId}`)}>
+    <Link href={`/dashboard/providers/${providerId}`} className="group min-w-0">
       <Card
         padding="xs"
         className={`h-full hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors cursor-pointer ${allDisabled ? "opacity-50" : ""}`}
@@ -680,7 +678,7 @@ function ProviderCard({ providerId, provider, stats, authType, onToggle }) {
           </div>
         </div>
       </Card>
-    </div>
+    </Link>
   );
 }
 
@@ -709,7 +707,6 @@ function ApiKeyProviderCard({
   authType,
   onToggle,
 }) {
-  const router = useRouter();
   const { connected, error, errorCode, errorTime, allDisabled } = stats;
   const isCompatible = providerId.startsWith(OPENAI_COMPATIBLE_PREFIX);
   const isAnthropicCompatible = providerId.startsWith(
@@ -739,7 +736,7 @@ function ApiKeyProviderCard({
   };
 
   return (
-    <div className="group min-w-0" onClick={() => router.push(`/dashboard/providers/${providerId}`)}>
+    <Link href={`/dashboard/providers/${providerId}`} className="group min-w-0">
       <Card
         padding="xs"
         className={`h-full hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors cursor-pointer ${allDisabled ? "opacity-50" : ""}`}
@@ -819,7 +816,7 @@ function ApiKeyProviderCard({
           </div>
         </div>
       </Card>
-    </div>
+    </Link>
   );
 }
 
