@@ -3,7 +3,13 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* Hide icon ligature text until font is ready */
-.material-symbols-outlined { visibility: hidden; }
+.material-symbols-outlined { 
+  visibility: hidden;
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+  flex-grow: 0;
+}
 .fonts-loaded .material-symbols-outlined { visibility: visible; }
 
 /* ============================================================
