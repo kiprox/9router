@@ -2,9 +2,12 @@
 const nextConfig = {
   output: "standalone",
   serverExternalPackages: ["better-sqlite3", "sql.js", "node:sqlite", "bun:sqlite"],
-
+  turbopack: {
+    root: projectRoot
+  },
+  outputFileTracingRoot: monorepoRoot,
   outputFileTracingExcludes: {
-    "*": ["./app/gitbook/**/*", "./gitbook/**/*"]
+    "*": ["./gitbook/**/*"]
   },
   images: {
     unoptimized: true
@@ -20,7 +23,7 @@ const nextConfig = {
       };
     }
     // Exclude logs, .next, gitbook subapp from watcher
-    config.watchOptions = { ...config.watchOptions, ignored: /[\\/](logs|\.next|gitbook)[\\/]/ };
+    config.watchOptions = { ...config.watchOptions, ignored: /[\\/](logs|\.next|gitbook|cli)[\\/]/ };
     return config;
   },
   async rewrites() {
