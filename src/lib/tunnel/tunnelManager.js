@@ -90,11 +90,18 @@ function getMachineId() {
 // ─── Cloudflare Tunnel ───────────────────────────────────────────────────────
 
 async function registerTunnelUrl(shortId, tunnelUrl) {
-  await fetch(`${WORKER_URL}/api/tunnel/register`, {
+  const res = await fetch(`${WORKER_URL}/api/tunnel/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ shortId, tunnelUrl })
   });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Failed to register tunnel (status=${res.status}): ${body || res.statusText}`);
+  }
+
+  return await res.json().catch(() => ({}));
 }
 
 function throwIfCancelled(token, label) {
@@ -129,7 +136,8 @@ export async function enableTunnel(localPort = 20128) {
     const onUrlUpdate = async (url) => {
       if (token.cancelled) return;
       console.log(`[Tunnel] url updated: ${url}`);
-      await registerTunnelUrl(shortId, url);
+      const registration = await registerTunnelUrl(shortId, url);
+      console.log(`[Tunnel] worker registration updated shortId=${registration.shortId || shortId}`);
       saveState({ shortId, machineId, tunnelUrl: url });
       await updateSettings({ tunnelEnabled: true, tunnelUrl: url });
     };
@@ -139,7 +147,8 @@ export async function enableTunnel(localPort = 20128) {
     throwIfCancelled(token, "tunnel");
 
     const publicUrl = `https://r${shortId}.${PUBLIC_DOMAIN}`;
-    await registerTunnelUrl(shortId, tunnelUrl);
+    const registration = await registerTunnelUrl(shortId, tunnelUrl);
+    console.log(`[Tunnel] worker registration ok shortId=${registration.shortId || shortId}`);
     saveState({ shortId, machineId, tunnelUrl });
     await updateSettings({ tunnelEnabled: true, tunnelUrl });
     console.log(`[Tunnel] registered shortId=${shortId} publicUrl=${publicUrl}`);
