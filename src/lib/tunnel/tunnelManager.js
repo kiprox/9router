@@ -1,4 +1,7 @@
 import crypto from "crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { DATA_DIR } from "../dataDir.js";
 import { loadState, saveState, generateShortId } from "./state.js";
 import { spawnQuickTunnel, killCloudflared, isCloudflaredRunning, setUnexpectedExitHandler } from "./cloudflared.js";
 import { startFunnel, stopFunnel, isTailscaleRunning, isTailscaleRunningStrict, isTailscaleLoggedIn, startLogin, startDaemonWithPassword, provisionCert } from "./tailscale.js";
@@ -10,7 +13,20 @@ initDbHooks(getSettings, updateSettings);
 
 const WORKER_URL = process.env.TUNNEL_WORKER_URL || "https://9router.com";
 const PUBLIC_DOMAIN = process.env.PUBLIC_DOMAIN || process.env.TUNNEL_PUBLIC_DOMAIN || "9router.com";
-const MACHINE_ID_SALT = process.env.MACHINE_ID_SALT || "0ee8522cbc0700b33e9263c02bd00f94";
+
+const MACHINE_ID_SALT_PATH = path.join(DATA_DIR, "machine_id_salt");
+function loadMachineIdSalt() {
+  if (process.env.MACHINE_ID_SALT) return process.env.MACHINE_ID_SALT;
+  if (fs.existsSync(MACHINE_ID_SALT_PATH)) {
+    return fs.readFileSync(MACHINE_ID_SALT_PATH, "utf8").trim();
+  }
+  const newSalt = crypto.randomBytes(32).toString("hex");
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(MACHINE_ID_SALT_PATH, newSalt, "utf8");
+  console.info("[Tunnel] Generated new MACHINE_ID_SALT and saved to", MACHINE_ID_SALT_PATH);
+  return newSalt;
+}
+const MACHINE_ID_SALT = loadMachineIdSalt();
 
 // Per-service state (independent: tunnel ≠ tailscale)
 const tunnelSvc = {

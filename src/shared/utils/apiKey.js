@@ -1,6 +1,25 @@
-import crypto from "crypto";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { DATA_DIR } from "../../lib/dataDir.js";
 
-const API_KEY_SECRET = process.env.API_KEY_SECRET || "endpoint-proxy-api-key-secret";
+const API_KEY_SECRET_PATH = path.join(DATA_DIR, "api_key_secret");
+
+function loadApiKeySecret() {
+  if (process.env.API_KEY_SECRET) return process.env.API_KEY_SECRET;
+
+  if (fs.existsSync(API_KEY_SECRET_PATH)) {
+    return fs.readFileSync(API_KEY_SECRET_PATH, "utf8").trim();
+  }
+
+  const newSecret = crypto.randomBytes(32).toString("hex");
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(API_KEY_SECRET_PATH, newSecret, "utf8");
+  console.info("[APIKey] Generated new secret and saved to", API_KEY_SECRET_PATH);
+  return newSecret;
+}
+
+const API_KEY_SECRET = loadApiKeySecret();
 
 /**
  * Generate 6-char random keyId
@@ -18,6 +37,7 @@ function generateKeyId() {
  * Generate CRC (8-char HMAC)
  */
 function generateCrc(machineId, keyId) {
+  if (!API_KEY_SECRET) throw new Error("[APIKey] API_KEY_SECRET not initialized");
   return crypto
     .createHmac("sha256", API_KEY_SECRET)
     .update(machineId + keyId)
