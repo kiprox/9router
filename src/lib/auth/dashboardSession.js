@@ -1,17 +1,28 @@
 import { SignJWT, jwtVerify } from "jose";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { DATA_DIR } from "../dataDir.js";
 
-const DEFAULT_JWT_SECRET = "9router-default-secret-change-me";
-const jwtSecret = process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
+const JWT_SECRET_PATH = path.join(DATA_DIR, "jwt_secret");
 
-if (process.env.NODE_ENV === "production" && jwtSecret === DEFAULT_JWT_SECRET) {
-  console.error("[Auth] Fatal: JWT_SECRET must be set to a non-default value in production.");
-  process.exit(1);
+function loadOrGenerateJwtSecret() {
+  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
+
+  if (fs.existsSync(JWT_SECRET_PATH)) {
+    return fs.readFileSync(JWT_SECRET_PATH, "utf8").trim();
+  }
+
+  const newSecret = crypto.randomBytes(32).toString("hex");
+
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(JWT_SECRET_PATH, newSecret, "utf8");
+
+  console.info("[Auth] Generated new JWT_SECRET and saved to", JWT_SECRET_PATH);
+  return newSecret;
 }
 
-if (process.env.NODE_ENV !== "production" && jwtSecret === DEFAULT_JWT_SECRET) {
-  console.warn("[Auth] Warning: using default JWT_SECRET. Set JWT_SECRET before production use.");
-}
-
+const jwtSecret = loadOrGenerateJwtSecret();
 const SECRET = new TextEncoder().encode(jwtSecret);
 
 export function shouldUseSecureCookie(request) {
