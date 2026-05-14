@@ -71,7 +71,7 @@ export const CLI_TOOLS = {
   claude: {
     id: "claude",
     name: "Claude Code",
-    icon: "terminal",
+    image: "/providers/claude.png",
     color: "#D97757",
     description: "Anthropic Claude Code CLI",
     configType: "env",
@@ -217,7 +217,7 @@ export const CLI_TOOLS = {
   amp: {
     id: "amp",
     name: "Amp CLI",
-    icon: "terminal",
+    image: "/providers/amp.png",
     color: "#F97316",
     description: "Sourcegraph Amp coding assistant CLI",
     docsUrl: "/docs?section=cli-tools&tool=amp",
@@ -248,7 +248,7 @@ amp --model "{{model}}"
   qwen: {
     id: "qwen",
     name: "Qwen Code",
-    icon: "psychology",
+    image: "/providers/qwen.png",
     color: "#10B981",
     description: "Alibaba Qwen Code CLI — supports OpenAI, Anthropic & Gemini providers via 9Router",
     docsUrl: "https://qwenlm.github.io/qwen-code-docs/en/users/configuration/model-providers/",
@@ -312,6 +312,35 @@ amp --model "{{model}}"
     notes: [
       { type: "info", text: "DeepSeek TUI uses ~/.deepseek/config.toml for configuration. 9Router will update the provider to 'openai' mode with your base_url, api_key, and model." },
       { type: "warning", text: "Config path: Linux/macOS ~/.deepseek/config.toml • Windows %USERPROFILE%\\.deepseek\\config.toml" },
+    ],
+  },
+  jcode: {
+    id: "jcode",
+    name: "jcode",
+    image: "/providers/jcode.png",
+    color: "#FF6B35",
+    description: "High-performance Rust-based coding agent harness",
+    configType: "custom",
+    docsUrl: "https://github.com/1jehuang/jcode",
+    notes: [
+      {
+        type: "info",
+        text: "jcode is a Rust-based coding agent with semantic memory, multi-agent swarms, and extreme performance (27.8 MB RAM, 14ms boot)."
+      },
+      {
+        type: "info",
+        text: "Configure 9router as an OpenAI-compatible provider to route all jcode requests through 9router's optimization layer."
+      },
+      {
+        type: "warning",
+        text: "Requires jcode installed. Install via: curl -fsSL https://raw.githubusercontent.com/1jehuang/jcode/master/scripts/install.sh | bash"
+      },
+    ],
+    defaultModels: [
+      { id: "claude-opus-4-7", name: "Claude Opus 4.7", alias: "opus", defaultValue: "cc/claude-opus-4-7" },
+      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", alias: "sonnet", defaultValue: "cc/claude-sonnet-4-6" },
+      { id: "gpt-5.5", name: "GPT 5.5", alias: "gpt5", defaultValue: "cx/gpt-5.5" },
+      { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro", alias: "gemini", defaultValue: "gemini/gemini-3.1-pro" },
     ],
   },
   // HIDDEN: gemini-cli

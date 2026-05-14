@@ -1,3 +1,27 @@
+# v0.4.41 (2026-05-14)
+
+## Features
+- Add jcode CLI tool integration with auto-configuration (#1047)
+- Redesign CLI Tools dashboard: grid layout (1/2/3 cols) + dedicated detail page per tool
+- Add drag-and-drop reordering for combo models (#1108)
+- Add Today period option to Usage & Analytics (#1063)
+- Add DeepSeek V4 Pro effort aliases (#950)
+
+## Fixes
+- fix(autostart): work on nvm + npm 9/10, actually register with launchctl (#1104, fixes #1082)
+- Fix Ollama usage not tracked/shown in UI (#1102)
+- fix(opencode): preserve DeepSeek reasoning content (#1099, fixes #1093)
+
+## Improvements
+- Sync DeepSeek TUI card style with other CLI tools (badges, layout, manual config modal)
+- Add official logos for Amp CLI, jcode, Qwen Code (replace generic icons)
+- Resize deepseek-tui icon 1024→128 with padding for visual consistency
+
+# v0.4.39 (2026-05-14)
+
+## Fixes
+- fix(docker): restore `/app/server.js` (v0.4.38 regression)
+
 # v0.4.38 (2026-05-13)
 
 ## Features

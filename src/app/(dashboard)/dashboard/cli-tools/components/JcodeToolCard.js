@@ -7,9 +7,7 @@ import BaseUrlSelect from "./BaseUrlSelect";
 import ApiKeySelect from "./ApiKeySelect";
 import { matchKnownEndpoint } from "./cliEndpointMatch";
 
-const ENDPOINT = "/api/cli-tools/deepseek-tui-settings";
-
-export default function DeepSeekTuiToolCard({
+export default function JcodeToolCard({
   tool,
   isExpanded,
   onToggle,
@@ -24,8 +22,8 @@ export default function DeepSeekTuiToolCard({
   tailscaleEnabled,
   tailscaleUrl,
 }) {
-  const [deepseekStatus, setDeepseekStatus] = useState(initialStatus || null);
-  const [checking, setChecking] = useState(false);
+  const [jcodeStatus, setJcodeStatus] = useState(initialStatus || null);
+  const [checkingJcode, setCheckingJcode] = useState(false);
   const [applying, setApplying] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [message, setMessage] = useState(null);
@@ -38,11 +36,11 @@ export default function DeepSeekTuiToolCard({
   const hasInitializedModel = useRef(false);
 
   const getConfigStatus = () => {
-    if (!deepseekStatus?.installed) return null;
-    const openaiSection = deepseekStatus.settings?.["providers.openai"];
-    if (!openaiSection?.base_url) return "not_configured";
-    if (matchKnownEndpoint(openaiSection.base_url, { tunnelPublicUrl, tailscaleUrl })) return "configured";
-    return "other";
+    if (!jcodeStatus?.installed) return null;
+    if (!jcodeStatus?.has9Router) return "not_configured";
+    const currentProvider = jcodeStatus.config?.providers?.["9router"];
+    if (!currentProvider) return "not_configured";
+    return matchKnownEndpoint(currentProvider.base_url, { tunnelPublicUrl, tailscaleUrl }) ? "configured" : "other";
   };
 
   const configStatus = getConfigStatus();
@@ -54,12 +52,12 @@ export default function DeepSeekTuiToolCard({
   }, [apiKeys, selectedApiKey]);
 
   useEffect(() => {
-    if (initialStatus) setDeepseekStatus(initialStatus);
+    if (initialStatus) setJcodeStatus(initialStatus);
   }, [initialStatus]);
 
   useEffect(() => {
-    if (isExpanded && !deepseekStatus) {
-      checkStatus();
+    if (isExpanded && !jcodeStatus) {
+      checkJcodeStatus();
       fetchModelAliases();
     }
     if (isExpanded) fetchModelAliases();
@@ -76,23 +74,32 @@ export default function DeepSeekTuiToolCard({
   };
 
   useEffect(() => {
-    if (deepseekStatus?.installed && !hasInitializedModel.current) {
+    if (jcodeStatus?.installed && !hasInitializedModel.current) {
       hasInitializedModel.current = true;
-      const openaiSection = deepseekStatus.settings?.["providers.openai"];
-      if (openaiSection?.model) setSelectedModel(openaiSection.model);
+      const provider = jcodeStatus.config?.providers?.["9router"];
+      if (provider) {
+        if (provider.default_model) {
+          setSelectedModel(provider.default_model);
+        }
+        // Try to match API key from env file
+        const envApiKey = jcodeStatus.envApiKey;
+        if (envApiKey && apiKeys?.some(k => k.key === envApiKey)) {
+          setSelectedApiKey(envApiKey);
+        }
+      }
     }
-  }, [deepseekStatus]);
+  }, [jcodeStatus, apiKeys]);
 
-  const checkStatus = async () => {
-    setChecking(true);
+  const checkJcodeStatus = async () => {
+    setCheckingJcode(true);
     try {
-      const res = await fetch(ENDPOINT);
+      const res = await fetch("/api/cli-tools/jcode-settings");
       const data = await res.json();
-      setDeepseekStatus(data);
+      setJcodeStatus(data);
     } catch (error) {
-      setDeepseekStatus({ installed: false, error: error.message });
+      setJcodeStatus({ installed: false, error: error.message });
     } finally {
-      setChecking(false);
+      setCheckingJcode(false);
     }
   };
 
@@ -110,7 +117,12 @@ export default function DeepSeekTuiToolCard({
     return url.endsWith("/v1") ? url : `${url}/v1`;
   };
 
-  const handleApply = async () => {
+  const getDisplayUrl = () => {
+    const url = customBaseUrl || getLocalBaseUrl();
+    return url.endsWith("/v1") ? url : `${url}/v1`;
+  };
+
+  const handleApplySettings = async () => {
     setApplying(true);
     setMessage(null);
     try {
@@ -118,19 +130,19 @@ export default function DeepSeekTuiToolCard({
         || (apiKeys?.length > 0 ? apiKeys[0].key : null)
         || (!cloudEnabled ? "sk_9router" : null);
 
-      const res = await fetch(ENDPOINT, {
+      const res = await fetch("/api/cli-tools/jcode-settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           baseUrl: getEffectiveBaseUrl(),
           apiKey: keyToUse,
-          model: selectedModel,
+          models: selectedModel ? [selectedModel] : [],
         }),
       });
       const data = await res.json();
       if (res.ok) {
         setMessage({ type: "success", text: "Settings applied successfully!" });
-        checkStatus();
+        checkJcodeStatus();
       } else {
         setMessage({ type: "error", text: data.error || "Failed to apply settings" });
       }
@@ -141,16 +153,17 @@ export default function DeepSeekTuiToolCard({
     }
   };
 
-  const handleReset = async () => {
+  const handleResetSettings = async () => {
     setRestoring(true);
     setMessage(null);
     try {
-      const res = await fetch(ENDPOINT, { method: "DELETE" });
+      const res = await fetch("/api/cli-tools/jcode-settings", { method: "DELETE" });
       const data = await res.json();
       if (res.ok) {
         setMessage({ type: "success", text: "Settings reset successfully!" });
         setSelectedModel("");
-        checkStatus();
+        setSelectedApiKey("");
+        checkJcodeStatus();
       } else {
         setMessage({ type: "error", text: data.error || "Failed to reset settings" });
       }
@@ -171,14 +184,29 @@ export default function DeepSeekTuiToolCard({
       ? selectedApiKey
       : (!cloudEnabled ? "sk_9router" : "<API_KEY_FROM_DASHBOARD>");
 
-    const tomlContent = `[providers.openai]
+    const configToml = `[providers.9router]
+type = "openai-compatible"
 base_url = "${getEffectiveBaseUrl()}"
-api_key = "${keyToUse}"
-model = "${selectedModel || "provider/model-id"}"
-`;
+auth = "bearer"
+api_key_env = "JCODE_9ROUTER_API_KEY"
+env_file = "provider-9router.env"
+default_model = "${selectedModel || "cc/claude-opus-4-7"}"
+requires_api_key = true
+
+[[providers.9router.models]]
+id = "${selectedModel || "cc/claude-opus-4-7"}"`;
+
+    const envContent = `JCODE_9ROUTER_API_KEY="${keyToUse}"`;
 
     return [
-      { filename: "~/.deepseek/config.toml", content: tomlContent },
+      {
+        filename: "~/.jcode/config.toml",
+        content: configToml,
+      },
+      {
+        filename: "~/.config/jcode/provider-9router.env",
+        content: envContent,
+      },
     ];
   };
 
@@ -187,7 +215,7 @@ model = "${selectedModel || "provider/model-id"}"
       <div className="flex items-start justify-between gap-3 hover:cursor-pointer sm:items-center" onClick={onToggle}>
         <div className="flex min-w-0 items-center gap-3">
           <div className="size-8 flex items-center justify-center shrink-0">
-            <Image src={tool.image || "/providers/deepseek-tui.png"} alt={tool.name} width={32} height={32} className="size-8 object-contain rounded-lg" sizes="32px" onError={(e) => { e.target.style.display = "none"; }} />
+            <Image src={tool.image || "/providers/jcode.png"} alt={tool.name} width={32} height={32} className="size-8 object-contain rounded-lg" sizes="32px" onError={(e) => { e.target.style.display = "none"; }} />
           </div>
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -204,22 +232,24 @@ model = "${selectedModel || "provider/model-id"}"
 
       {isExpanded && (
         <div className="mt-4 pt-4 border-t border-border flex flex-col gap-4">
-          {checking && (
+          {checkingJcode && (
             <div className="flex items-center gap-2 text-text-muted">
               <span className="material-symbols-outlined animate-spin">progress_activity</span>
-              <span>Checking DeepSeek TUI...</span>
+              <span>Checking jcode CLI...</span>
             </div>
           )}
 
-          {!checking && deepseekStatus && !deepseekStatus.installed && (
+          {!checkingJcode && jcodeStatus && !jcodeStatus.installed && (
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-3 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
                 <div className="flex items-start gap-3">
                   <span className="material-symbols-outlined text-yellow-500">warning</span>
                   <div className="flex-1">
-                    <p className="font-medium text-yellow-600 dark:text-yellow-400">DeepSeek TUI not detected locally</p>
-                    <p className="text-sm text-text-muted mt-1">Install via npm:</p>
-                    <code className="block mt-2 p-2 bg-black/20 rounded text-xs font-mono">npm install -g deepseek-tui</code>
+                    <p className="font-medium text-yellow-600 dark:text-yellow-400">jcode CLI not detected locally</p>
+                    <p className="text-sm text-text-muted mt-1">Install jcode to enable automatic configuration:</p>
+                    <code className="block mt-2 p-2 bg-black/20 rounded text-xs font-mono">
+                      curl -fsSL https://raw.githubusercontent.com/1jehuang/jcode/master/scripts/install.sh | bash
+                    </code>
                     <p className="text-sm text-text-muted mt-2">Manual configuration is still available if 9router is deployed on a remote server.</p>
                   </div>
                 </div>
@@ -233,19 +263,20 @@ model = "${selectedModel || "provider/model-id"}"
             </div>
           )}
 
-          {!checking && deepseekStatus?.installed && (
+          {!checkingJcode && jcodeStatus?.installed && (
             <>
               <div className="flex flex-col gap-2">
+                {/* Info notes */}
                 {tool.notes && tool.notes.length > 0 && (
                   <div className="flex flex-col gap-2 mb-2">
                     {tool.notes.map((note, idx) => (
                       <div key={idx} className={`flex items-start gap-2 p-2 rounded text-xs ${
+                        note.type === "info" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" :
                         note.type === "warning" ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400" :
-                        note.type === "error" ? "bg-red-500/10 text-red-600 dark:text-red-400" :
-                        "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                        "bg-gray-500/10 text-text-muted"
                       }`}>
                         <span className="material-symbols-outlined text-[14px] mt-0.5">
-                          {note.type === "warning" ? "warning" : note.type === "error" ? "error" : "info"}
+                          {note.type === "info" ? "info" : note.type === "warning" ? "warning" : "help"}
                         </span>
                         <span>{note.text}</span>
                       </div>
@@ -253,11 +284,12 @@ model = "${selectedModel || "provider/model-id"}"
                   </div>
                 )}
 
+                {/* Endpoint (selector) */}
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr] sm:items-center sm:gap-2">
                   <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">Select Endpoint</span>
                   <span className="material-symbols-outlined hidden text-text-muted text-[14px] sm:inline">arrow_forward</span>
                   <BaseUrlSelect
-                    value={customBaseUrl || getEffectiveBaseUrl()}
+                    value={customBaseUrl || getDisplayUrl()}
                     onChange={setCustomBaseUrl}
                     requiresExternalUrl={tool.requiresExternalUrl}
                     tunnelEnabled={tunnelEnabled}
@@ -267,30 +299,40 @@ model = "${selectedModel || "provider/model-id"}"
                   />
                 </div>
 
-                {deepseekStatus?.settings?.["providers.openai"]?.base_url && (
+                {/* Current configured */}
+                {jcodeStatus?.config?.providers?.["9router"]?.base_url && (
                   <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr_auto] sm:items-center sm:gap-2">
                     <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">Current</span>
                     <span className="material-symbols-outlined hidden text-text-muted text-[14px] sm:inline">arrow_forward</span>
                     <span className="min-w-0 truncate rounded bg-surface/40 px-2 py-2 text-xs text-text-muted sm:py-1.5">
-                      {deepseekStatus.settings["providers.openai"].base_url}
+                      {jcodeStatus.config.providers["9router"].base_url}
                     </span>
                   </div>
                 )}
 
+                {/* API Key */}
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr_auto] sm:items-center sm:gap-2">
                   <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">API Key</span>
                   <span className="material-symbols-outlined hidden text-text-muted text-[14px] sm:inline">arrow_forward</span>
                   <ApiKeySelect value={selectedApiKey} onChange={setSelectedApiKey} apiKeys={apiKeys} cloudEnabled={cloudEnabled} />
                 </div>
 
+                {/* Default Model */}
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr_auto] sm:items-center sm:gap-2">
                   <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">Default Model</span>
                   <span className="material-symbols-outlined hidden text-text-muted text-[14px] sm:inline">arrow_forward</span>
                   <div className="relative w-full min-w-0">
-                    <input type="text" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} placeholder="provider/model-id" className="w-full min-w-0 pl-2 pr-7 py-2 bg-surface rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5" />
+                    <input type="text" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} placeholder="cc/claude-opus-4-7" className="w-full min-w-0 pl-2 pr-7 py-2 bg-surface rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5" />
                     {selectedModel && <button onClick={() => setSelectedModel("")} className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-red-500 rounded transition-colors" title="Clear"><span className="material-symbols-outlined text-[14px]">close</span></button>}
                   </div>
                   <button onClick={() => setModalOpen(true)} disabled={!hasActiveProviders} className={`w-full sm:w-auto rounded border px-2 py-2 text-xs transition-colors sm:py-1.5 whitespace-nowrap sm:shrink-0 ${hasActiveProviders ? "bg-surface border-border text-text-main hover:border-primary cursor-pointer" : "opacity-50 cursor-not-allowed border-border"}`}>Select</button>
+                </div>
+
+                {/* Usage hint */}
+                <div className="flex flex-col gap-1 p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
+                  <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Usage:</p>
+                  <code className="text-xs font-mono text-text-muted">jcode --provider-profile 9router</code>
+                  <code className="text-xs font-mono text-text-muted">jcode --provider-profile 9router --model {selectedModel || "cc/claude-opus-4-7"}</code>
                 </div>
               </div>
 
@@ -302,10 +344,10 @@ model = "${selectedModel || "provider/model-id"}"
               )}
 
               <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
-                <Button variant="primary" size="sm" onClick={handleApply} disabled={!selectedModel} loading={applying}>
+                <Button variant="primary" size="sm" onClick={handleApplySettings} disabled={!selectedModel} loading={applying}>
                   <span className="material-symbols-outlined text-[14px] mr-1">save</span>Apply
                 </Button>
-                <Button variant="outline" size="sm" onClick={handleReset} disabled={!deepseekStatus?.has9Router} loading={restoring}>
+                <Button variant="outline" size="sm" onClick={handleResetSettings} disabled={!jcodeStatus?.has9Router} loading={restoring}>
                   <span className="material-symbols-outlined text-[14px] mr-1">restore</span>Reset
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setShowManualConfigModal(true)}>
@@ -324,13 +366,13 @@ model = "${selectedModel || "provider/model-id"}"
         selectedModel={selectedModel}
         activeProviders={activeProviders}
         modelAliases={modelAliases}
-        title="Select Model for DeepSeek TUI"
+        title="Select Model for jcode"
       />
 
       <ManualConfigModal
         isOpen={showManualConfigModal}
         onClose={() => setShowManualConfigModal(false)}
-        title="DeepSeek TUI - Manual Configuration"
+        title="jcode - Manual Configuration"
         configs={getManualConfigs()}
       />
     </Card>
