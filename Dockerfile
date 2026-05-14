@@ -47,7 +47,7 @@ COPY --from=builder /app/node_modules/sql.js/dist/sql-wasm.wasm ./node_modules/s
 COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
 
 # health cek butuh ini
-RUN apk add --no-cache curl wget
+RUN apk add --no-cache curl wget git
 
 # Cukup buat folder data saja, tidak perlu setting user lagi
 RUN mkdir -p /app/data /app/data-home
