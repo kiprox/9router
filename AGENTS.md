@@ -2,7 +2,7 @@
 
 ## Repo shape
 
-- Root: Next.js app (React 19) + API gateway/dashboard. Startup: `src/server-init.js` → `src/shared/services/initializeApp.js`.
+- Root: private Next.js app (React 19) + API gateway/dashboard. Startup: `src/server-init.js` → `src/shared/services/initializeApp.js`.
 - `open-sse/`: provider/translator lib; import via alias `open-sse/*` (`jsconfig.json`).
 - `gitbook/`: separate Next.js docs app (own `package.json`), CI builds from `gitbook/` only.
 - `cli/`: published npm CLI (own `package.json`, own build/publish scripts).
@@ -21,7 +21,7 @@ npm run start:bun  # NODE_ENV=production bun ./.next/standalone/server.js
 npx eslint .
 ```
 
-- No root `npm test` script exists; `.github/workflows/npm-publish.yml` still runs `npm test` on GitHub Release.
+- No root lockfile or `npm test` script exists; `.github/workflows/npm-publish.yml` still runs root `npm ci`, `npm test`, `npm publish` on GitHub Release even though root `package.json` is private.
 - `gitbook`: `npm run dev` serves port `3001`; `npm run build` builds static export used by GitHub Pages CI.
 - `cli`: `npm run build`, `npm run pack:cli`, `npm run publish:cli`; postinstall installs runtime deps under `~/.9router/runtime/node_modules`.
 
@@ -30,6 +30,7 @@ npx eslint .
 - Port `20128` appears in root scripts and Dockerfile `PORT`/`EXPOSE`; changing port is cross-file.
 - `next.config.mjs` has repo note `DO NOT CHANGE - dont stage this`; avoid editing unless user explicitly asks.
 - Next output is `standalone`; Dockerfile manually copies `open-sse/`, `src/mitm/`, `src/shared/`, `src/lib/`, selected native/wasm deps into runtime.
+- Dockerfile uses Node `22-alpine`; npm publish workflow uses Node 20; GitBook deploy uses Node 24.
 - Rewrites in `next.config.mjs`: `/v1/*` and `/codex/*` map into `/api/v1/*`; duplicate `/v1/v1/*` routes are intentional config.
 - `initializeApp` uses global singleton to survive Next dev hot reload; registers SIGINT/SIGTERM cleanup for DNS + cloudflared.
 
@@ -49,4 +50,4 @@ npx eslint .
 
 - Docker image publish on tag `v*` or manual dispatch: `.github/workflows/docker-publish.yml`.
 - GitBook deploy on push to main/master touching `gitbook/**`: `.github/workflows/gitbook-pages.yml` (Node 24, working dir `gitbook`).
-- NPM publish on GitHub Release created: `.github/workflows/npm-publish.yml` (Node 20, root `npm ci`, `npm test`, `npm publish`).
+- NPM publish on GitHub Release created: `.github/workflows/npm-publish.yml` (currently root app, not `cli/`).
