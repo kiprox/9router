@@ -6,7 +6,7 @@ FROM node:22-alpine AS builder
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
 WORKDIR /app
-RUN apk add --no-cache python3 make g++ linux-headers
+RUN apk add --no-cache python3 make g++
 
 COPY package.json package-lock.json* ./
 RUN npm install --silent
@@ -45,22 +45,9 @@ COPY --from=builder /app/src/lib ./src/lib
 COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 COPY --from=builder /app/node_modules/sql.js/dist/sql-wasm.wasm ./node_modules/sql.js/dist/sql-wasm.wasm
 COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
-# Ensure `next` is available at runtime in case tracing did not include it.
-COPY --from=builder /app/node_modules/next ./node_modules/next
 
-# Setup user non-root (sebagai cadangan jika tidak butuh root)
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nextjs -u 1001 && \
-    mkdir -p /app/data /app/data-home
-
-# Install su-exec dan ambil entrypoint.sh
-RUN apk --no-cache add su-exec
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-RUN ln -sf /app/data-home /home/nextjs/.9router 2>/dev/null || true
-# healthy check & docker updater
-RUN apk add --no-cache curl wget git
+# health cek butuh ini
+RUN apk add --no-cache curl wget
 
 # Cukup buat folder data saja, tidak perlu setting user lagi
 RUN mkdir -p /app/data /app/data-home
