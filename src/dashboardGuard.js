@@ -6,11 +6,6 @@ import { verifyDashboardAuthToken } from "@/lib/auth/dashboardSession";
 const CLI_TOKEN_HEADER = "x-9r-cli-token";
 const CLI_TOKEN_SALT = "9r-cli-auth";
 
-const STRICT_AUTH_API_PATHS = [
-  "/api/providers/client",
-  "/api/keys",
-];
-
 let cachedCliToken = null;
 async function getCliToken() {
   if (!cachedCliToken) cachedCliToken = await getConsistentMachineId(CLI_TOKEN_SALT);
