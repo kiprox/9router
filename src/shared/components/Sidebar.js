@@ -178,7 +178,7 @@ export default function Sidebar({ onClose }) {
               className="flex flex-col gap-1 rounded p-1 -m-1 text-left hover:bg-surface-2 transition-colors cursor-pointer"
             >
               <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
-                DockerHub: {updateInfo.dockerInfo.repo}:{updateInfo.dockerInfo.tag}
+                Update Ready!
               </span>
               <code className="text-[10px] text-blue-600/70 dark:text-blue-300/60 font-mono truncate">
                 {copied ? "✓ copied!" : updateInfo.dockerInfo.pullCommand}
