@@ -469,11 +469,10 @@ async function startServer(apiKey, sudoPassword, forceKillPort443 = false) {
       if (fs.existsSync(PID_FILE)) {
         const savedPid = parseInt(fs.readFileSync(PID_FILE, "utf-8").trim(), 10);
         if (savedPid && isProcessAlive(savedPid)) {
-          serverPid = savedPid;
-          log(`♻️ Reusing existing process (PID: ${savedPid})`);
-          await saveMitmSettings(true, sudoPassword);
-          if (sudoPassword) setCachedPassword(sudoPassword);
-          return { running: true, pid: savedPid };
+      serverPid = savedPid;
+        log(`♻️ Reusing existing process (PID: ${savedPid})`);
+        await saveMitmSettings(true, null);
+        return { running: true, pid: savedPid };
         } else {
           fs.unlinkSync(PID_FILE);
         }
@@ -612,6 +611,7 @@ async function startServer(apiKey, sudoPassword, forceKillPort443 = false) {
     );
     serverProcess.stdin.write(`${sudoPassword}\n`);
     serverProcess.stdin.end();
+    setCachedPassword(null);
   } else {
     // Docker/minimal images: no sudo — same as Windows-style direct spawn
     serverProcess = spawn(process.execPath, [effectiveServerPath], {
@@ -684,7 +684,7 @@ async function startServer(apiKey, sudoPassword, forceKillPort443 = false) {
   }
 
   await saveMitmSettings(true, sudoPassword);
-  if (sudoPassword) setCachedPassword(sudoPassword);
+  if (sudoPassword) setCachedPassword(null);
 
   return { running: true, pid: serverPid };
 }

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { openSync, closeSync, fsyncSync } from "node:fs";
 import initSqlJs from "sql.js";
 import { PRAGMA_SQL } from "../schema.js";
 
@@ -15,27 +16,34 @@ export async function createSqlJsAdapter(filePath) {
   const buf = fs.existsSync(filePath) ? fs.readFileSync(filePath) : null;
   const db = new SQLLib.Database(buf);
   db.exec(PRAGMA_SQL);
-  // Schema is created/synced by migrate.js after adapter init
 
   let dirty = false;
   let saveTimer = null;
-  const SAVE_DEBOUNCE_MS = 100;
+  const SAVE_DEBOUNCE_MS = 50;
+  const MAX_DIRTY_MS = 2000;
+  let lastSaveTime = Date.now();
 
   function persist() {
     const data = db.export();
-    fs.writeFileSync(filePath, Buffer.from(data));
+    const fd = fs.openSync(filePath, "w");
+    fs.writeSync(fd, Buffer.from(data));
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
     dirty = false;
+    lastSaveTime = Date.now();
   }
 
   function scheduleSave() {
     dirty = true;
     if (saveTimer) clearTimeout(saveTimer);
+    const elapsed = Date.now() - lastSaveTime;
+    const delay = elapsed >= MAX_DIRTY_MS ? 0 : SAVE_DEBOUNCE_MS;
     saveTimer = setTimeout(() => {
       saveTimer = null;
       if (dirty) {
         try { persist(); } catch (e) { console.error("[sqljs] save failed:", e); }
       }
-    }, SAVE_DEBOUNCE_MS);
+    }, delay);
   }
 
   function paramsObj(params) {

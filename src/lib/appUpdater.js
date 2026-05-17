@@ -169,18 +169,25 @@ export function spawnUpdaterAndExit(packageName = UPDATER_CONFIG.npmPackageName)
   const updaterPath = ensureRuntimeUpdater(resolveBundledUpdaterPath());
   const isTray = process.env.TRAY_MODE === "1";
   const relaunch = resolveRelaunchCommand();
-  // Relaunch matching original env: tray stays tray, foreground stays foreground
   const relaunchArgs = isTray
     ? [...relaunch.args, "--tray", "--skip-update"]
     : [...relaunch.args, "--skip-update"];
+
+  const sanitizedPackageName = (() => {
+    if (!packageName || typeof packageName !== "string") return "9router";
+    const trimmed = packageName.trim();
+    const isValid = /^[a-zA-Z0-9@/_\-]+$/.test(trimmed);
+    return isValid ? trimmed : "9router";
+  })();
 
   spawn(process.execPath, [updaterPath], {
     detached: true,
     stdio: "ignore",
     windowsHide: true,
+    shell: false,
     env: {
       ...process.env,
-      UPDATER_PKG_NAME: packageName,
+      UPDATER_PKG_NAME: sanitizedPackageName,
       UPDATER_PORT: String(UPDATER_CONFIG.statusPort),
       UPDATER_TAIL_LINES: String(UPDATER_CONFIG.statusLogTailLines),
       UPDATER_RETRIES: String(UPDATER_CONFIG.installRetries),

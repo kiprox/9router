@@ -10,6 +10,23 @@ const fs = require("fs");
 const os = require("os");
 
 const packageName = process.env.UPDATER_PKG_NAME || "9router";
+
+// Validate package name to prevent command injection
+function sanitizePackageName(name) {
+  if (!name || typeof name !== "string") return null;
+  const trimmed = name.trim();
+  // Only allow npm package name patterns: alphanumeric, @, /, -, _
+  // Reject shell metacharacters, paths, and flags
+  if (!/^[a-zA-Z0-9@/_\-]+$/.test(trimmed)) {
+    throw new Error(`Invalid package name: ${name}`);
+  }
+  return trimmed;
+}
+
+const safePackageName = sanitizePackageName(packageName);
+if (!safePackageName) {
+  throw new Error(`UPDATER_PKG_NAME environment variable contains invalid characters`);
+}
 const port = parseInt(process.env.UPDATER_PORT || "20129", 10);
 const tailLines = parseInt(process.env.UPDATER_TAIL_LINES || "8", 10);
 const maxRetries = parseInt(process.env.UPDATER_RETRIES || "3", 10);
@@ -131,16 +148,16 @@ function sleep(ms) {
 function runInstall() {
   state.attempt += 1;
   setPhase("installing");
-  pushLog(`[updater] attempt ${state.attempt}/${maxRetries} — npm i -g ${packageName} --prefer-online`);
+  pushLog(`[updater] attempt ${state.attempt}/${maxRetries} — npm i -g ${safePackageName} --prefer-online`);
 
   const isWin = process.platform === "win32";
   const cmd = isWin ? "npm.cmd" : "npm";
-  const args = ["i", "-g", packageName, "--prefer-online"];
+  const args = ["i", "-g", safePackageName, "--prefer-online"];
 
   const child = spawn(cmd, args, {
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
-    shell: isWin,
+    shell: false,
   });
 
   child.stdout.on("data", (buf) => {
@@ -198,16 +215,29 @@ async function waitForAppAndOpenBrowser() {
 function relaunchApp() {
   if (process.env.UPDATER_RELAUNCH !== "1") return;
   const cmd = process.env.UPDATER_RELAUNCH_CMD;
-  if (!cmd) return;
+  if (!cmd || typeof cmd !== "string") return;
+  if (/[;&|`$(){}!#~]/.test(cmd)) {
+    pushLog(`[updater] relaunch cmd rejected: invalid characters`);
+    return;
+  }
   let args = [];
-  try { args = JSON.parse(process.env.UPDATER_RELAUNCH_ARGS || "[]"); } catch { /* noop */ }
-  const isWin = process.platform === "win32";
+  try {
+    const parsed = JSON.parse(process.env.UPDATER_RELAUNCH_ARGS || "[]");
+    if (!Array.isArray(parsed) || !parsed.every(a => typeof a === "string")) {
+      pushLog(`[updater] relaunch args rejected: invalid format`);
+      return;
+    }
+    args = parsed;
+  } catch {
+    pushLog(`[updater] relaunch args rejected: JSON parse failed`);
+    return;
+  }
   try {
     const child = spawn(cmd, args, {
       detached: true,
       stdio: "ignore",
       windowsHide: true,
-      shell: isWin,
+      shell: false,
       env: { ...process.env, UPDATER_RELAUNCH: "", UPDATER_RELAUNCH_CMD: "", UPDATER_RELAUNCH_ARGS: "" },
     });
     child.unref();

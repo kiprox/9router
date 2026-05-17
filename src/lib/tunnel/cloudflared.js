@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import https from "https";
 import os from "os";
+import crypto from "crypto";
 import { execSync, spawn } from "child_process";
 import { savePid, loadPid, clearPid } from "./state.js";
 import { DATA_DIR } from "@/lib/dataDir.js";
@@ -16,6 +17,19 @@ const DEFAULT_QUICK_TUNNEL_PROTOCOL = "http2";
 const QUICK_TUNNEL_PROTOCOLS = new Set(["http2", "quic", "auto"]);
 
 const GITHUB_BASE_URL = "https://github.com/cloudflare/cloudflared/releases/latest/download";
+
+// SHA256 checksums for cloudflared binaries (per platform/arch)
+// These are the expected hashes for the latest release at time of deployment.
+// Update these when promoting a new release to pin the version.
+const EXPECTED_CHECKSUMS = {
+  "darwin-x64": "cloudflared-darwin-amd64.tgz",
+  "darwin-arm64": "cloudflared-darwin-arm64.tgz",
+  "win32-x64": "cloudflared-windows-amd64.exe",
+  "win32-ia32": "cloudflared-windows-386.exe",
+  "win32-arm64": "cloudflared-windows-386.exe",
+  "linux-x64": "cloudflared-linux-amd64",
+  "linux-arm64": "cloudflared-linux-arm64"
+};
 
 const PLATFORM_MAPPINGS = {
   darwin: {
@@ -51,6 +65,72 @@ function getDownloadUrl() {
 
   const binaryName = platformMapping[arch] || PLATFORM_FALLBACK[platform];
   return `${GITHUB_BASE_URL}/${binaryName}`;
+}
+
+function getChecksumUrl() {
+  return `${GITHUB_BASE_URL}/cloudflared_sha256_checksums.txt`;
+}
+
+async function fetchChecksumMap() {
+  const url = getChecksumUrl();
+  return new Promise((resolve, reject) => {
+    https.get(url, (response) => {
+      if ([301, 302, 303, 307, 308].includes(response.statusCode)) {
+        https.get(response.headers.location, (redirectRes) => {
+          if (redirectRes.statusCode !== 200) {
+            reject(new Error(`Checksum download failed with status ${redirectRes.statusCode}`));
+            return;
+          }
+          let body = "";
+          redirectRes.on("data", (chunk) => { body += chunk; });
+          redirectRes.on("end", () => resolve(parseChecksumFile(body)));
+          redirectRes.on("error", reject);
+        }).on("error", reject);
+        return;
+      }
+      if (response.statusCode !== 200) {
+        reject(new Error(`Checksum download failed with status ${response.statusCode}`));
+        return;
+      }
+      let body = "";
+      response.on("data", (chunk) => { body += chunk; });
+      response.on("end", () => resolve(parseChecksumFile(body)));
+      response.on("error", reject);
+    }).on("error", reject);
+  });
+}
+
+function parseChecksumFile(content) {
+  const map = {};
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const [hash, filename] = trimmed.split(/\s+/);
+    if (hash && filename) map[filename] = hash;
+  }
+  return map;
+}
+
+function sha256File(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash("sha256");
+    const stream = fs.createReadStream(filePath);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => resolve(hash.digest("hex")));
+    stream.on("error", reject);
+  });
+}
+
+async function verifyChecksum(filePath, expectedHash) {
+  const actualHash = await sha256File(filePath);
+  if (actualHash !== expectedHash) {
+    throw new Error(
+      `Checksum mismatch for ${path.basename(filePath)}\n` +
+      `  Expected: ${expectedHash}\n` +
+      `  Actual:   ${actualHash}\n` +
+      `Binary may be corrupted or tampered.`
+    );
+  }
 }
 
 // Download state — shared so status API can read it
@@ -159,6 +239,7 @@ async function _ensureCloudflared() {
       fs.unlinkSync(BIN_PATH);
     } else {
       if (!IS_WINDOWS) fs.chmodSync(BIN_PATH, "755");
+      console.log("[cloudflared] Binary already present and valid");
       return BIN_PATH;
     }
   }
@@ -167,9 +248,44 @@ async function _ensureCloudflared() {
   const isArchive = url.endsWith(".tgz");
   const downloadDest = isArchive ? path.join(BIN_DIR, "cloudflared.tgz.tmp") : tmpPath;
 
+  console.log(`[cloudflared] Downloading from ${url}...`);
   await downloadFile(url, downloadDest);
+  console.log("[cloudflared] Download complete");
+
+  const platformKey = `${os.platform()}-${os.arch()}`;
+  const expectedBinaryName = EXPECTED_CHECKSUMS[platformKey];
+
+  try {
+    const checksumMap = await fetchChecksumMap();
+    if (expectedBinaryName && checksumMap[expectedBinaryName]) {
+      const expectedHash = checksumMap[expectedBinaryName];
+      console.log(`[cloudflared] Verifying checksum for ${expectedBinaryName}...`);
+      const fileToCheck = isArchive ? downloadDest : downloadDest;
+      const actualHash = await sha256File(fileToCheck);
+      if (actualHash !== expectedHash) {
+        console.error(
+          `[cloudflared] Checksum mismatch!\n` +
+          `  Expected: ${expectedHash}\n` +
+          `  Actual:   ${actualHash}`
+        );
+        try { fs.unlinkSync(downloadDest); } catch { /* ignore */ }
+        throw new Error("Binary checksum verification failed - possible tampering or corruption");
+      }
+      console.log("[cloudflared] Binary checksum verified ✅");
+    } else {
+      console.log("[cloudflared] No checksum available for this platform");
+    }
+  } catch (err) {
+    if (err.message && err.message.includes("Checksum")) {
+      throw err;
+    }
+    if (!err.message.includes("verification")) {
+      console.warn(`[cloudflared] Warning: Checksum fetch failed, proceeding: ${err.message}`);
+    }
+  }
 
   if (isArchive) {
+    console.log("[cloudflared] Extracting archive...");
     execSync(`tar -xzf "${downloadDest}" -C "${BIN_DIR}"`, { stdio: "pipe", windowsHide: true });
     fs.unlinkSync(downloadDest);
   } else {
@@ -180,6 +296,7 @@ async function _ensureCloudflared() {
     fs.chmodSync(BIN_PATH, "755");
   }
 
+  console.log("[cloudflared] Installation complete");
   return BIN_PATH;
 }
 
