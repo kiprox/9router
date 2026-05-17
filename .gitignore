@@ -21,6 +21,7 @@ Dockerfile.dev
 /out/
 cli/.build-home/
 product
+
 # production
 /build
 .idea/
@@ -30,6 +31,7 @@ product
 .DS_Store
 *.pem
 .tmp
+TODO.md
 
 # debug
 npm-debug.log*
@@ -65,7 +67,6 @@ Thanks.md
 PUBLIC.en.md
 PR/*
 package-lock.json
-
 
 #Ignore vscode AI rules
 .github/instructions/codacy.instructions.md

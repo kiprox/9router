@@ -16,7 +16,7 @@ function loadOrGenerateJwtSecret() {
   const newSecret = crypto.randomBytes(32).toString("hex");
 
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(JWT_SECRET_PATH, newSecret, "utf8");
+  fs.writeFileSync(JWT_SECRET_PATH, newSecret, { mode: 0o600, encoding: "utf8" });
 
   console.info("[Auth] Generated new JWT_SECRET and saved to", JWT_SECRET_PATH);
   return newSecret;
