@@ -501,8 +501,9 @@ export const PROVIDER_MODELS = {
     { id: "command-a-03-2025", name: "Command A (Mar 2025)" },
   ],
   nvidia: [
-    { id: "openai/gpt-oss-20b", name: "GPT Oss 20B" },
-    { id: "openai/gpt-oss-120b", name: "GPT Oss 120B" },
+    { id: "openai/gpt-oss-20b", name: "GPT OSS 20B" },
+    { id: "openai/gpt-oss-120b", name: "GPT OSS 120B" },
+    { id: "qwen/qwen3-coder-480b-a35b-instruct", name: "Qwen 3 Coder" },
     { id: "qwen/qwen3.5-122b-a10b", name: "Qwen 3.5 122B-A10B" },
     { id: "deepseek-ai/deepseek-v4-flash", name: "Deepseek V4 Flash" },
     { id: "moonshotai/kimi-k2.6", name: "Kimi K2.6" },
