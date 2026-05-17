@@ -54,3 +54,4 @@ npm run publish:cli # build + npm publish
 - Docker: push to GHCR + Docker Hub on `v*` tag or manual dispatch (`.github/workflows/docker-publish.yml`); Node 22-alpine, multi-platform (amd64/arm64).
 - GitBook: deploy on changes under `gitbook/` (`.github/workflows/gitbook-pages.yml`); Node 24.
 - NPM publish: triggered by GitHub Release (`.github/workflows/npm-publish.yml`); Node 20; publishes root app (private — likely misconfigured), not `cli/`. The CLI is published manually via `cli/npm run publish:cli`.
+- Docker `output: "standalone"` bundles `.next/standalone`, `open-sse/`, `src/mitm/`, `src/shared/`, `src/lib/`, and native/wasm deps (`better-sqlite3`, `sql.js`, `node-forge`).
