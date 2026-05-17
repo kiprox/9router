@@ -4,6 +4,7 @@ import { IFLOW_CONFIG } from "../constants/oauth.js";
 import { getServerCredentials } from "../config/index.js";
 import { startLocalServer } from "../utils/server.js";
 import { spinner as createSpinner } from "../utils/ui.js";
+import { safeErrorText } from "../utils/sanitizeError.js";
 
 /**
  * iFlow OAuth Service
@@ -55,7 +56,7 @@ export class IFlowService {
     });
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Token exchange failed: ${error}`);
     }
 
@@ -76,7 +77,7 @@ export class IFlowService {
     );
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Failed to get user info: ${error}`);
     }
 

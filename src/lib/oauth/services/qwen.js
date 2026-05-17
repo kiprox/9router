@@ -3,6 +3,7 @@ import { QWEN_CONFIG } from "../constants/oauth.js";
 import { getServerCredentials } from "../config/index.js";
 import { generatePKCE } from "../utils/pkce.js";
 import { spinner as createSpinner } from "../utils/ui.js";
+import { safeErrorText } from "../utils/sanitizeError.js";
 
 /**
  * Qwen OAuth Service
@@ -32,7 +33,7 @@ export class QwenService {
     });
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Device code request failed: ${error}`);
     }
 

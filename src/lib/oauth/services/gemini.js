@@ -4,6 +4,7 @@ import { GEMINI_CONFIG, getOAuthClientMetadata } from "../constants/oauth.js";
 import { getServerCredentials } from "../config/index.js";
 import { startLocalServer } from "../utils/server.js";
 import { spinner as createSpinner } from "../utils/ui.js";
+import { safeErrorText } from "../utils/sanitizeError.js";
 
 /**
  * Gemini CLI (Google Cloud Code Assist) OAuth Service
@@ -51,7 +52,7 @@ export class GeminiCLIService {
     });
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Token exchange failed: ${error}`);
     }
 
@@ -81,7 +82,7 @@ export class GeminiCLIService {
     );
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Failed to fetch project ID: ${error}`);
     }
 
@@ -114,7 +115,7 @@ export class GeminiCLIService {
     });
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Failed to get user info: ${error}`);
     }
 

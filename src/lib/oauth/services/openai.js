@@ -2,6 +2,7 @@ import { OAuthService } from "./oauth.js";
 import { OPENAI_CONFIG } from "../constants/oauth.js";
 import { getServerCredentials } from "../config/index.js";
 import { spinner as createSpinner } from "../utils/ui.js";
+import { safeErrorText } from "../utils/sanitizeError.js";
 
 /**
  * OpenAI OAuth Service (Native)
@@ -50,7 +51,7 @@ export class OpenAIService extends OAuthService {
     });
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Token exchange failed: ${error}`);
     }
 

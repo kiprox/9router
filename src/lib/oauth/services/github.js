@@ -1,6 +1,7 @@
 import { OAuthService } from "./oauth.js";
 import { GITHUB_CONFIG } from "../constants/oauth.js";
 import { spinner as createSpinner } from "../utils/ui.js";
+import { safeErrorText } from "../utils/sanitizeError.js";
 
 /**
  * GitHub Copilot OAuth Service
@@ -28,7 +29,7 @@ export class GitHubService extends OAuthService {
     });
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Failed to get device code: ${error}`);
     }
 
@@ -113,7 +114,7 @@ export class GitHubService extends OAuthService {
     });
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Failed to get Copilot token: ${error}`);
     }
 
@@ -134,7 +135,7 @@ export class GitHubService extends OAuthService {
     });
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Failed to get user info: ${error}`);
     }
 

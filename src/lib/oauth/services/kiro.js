@@ -1,4 +1,5 @@
 import { KIRO_CONFIG } from "../constants/oauth.js";
+import { safeErrorText } from "../utils/sanitizeError.js";
 
 /**
  * Kiro OAuth Service
@@ -34,7 +35,7 @@ export class KiroService {
     });
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Failed to register client: ${error}`);
     }
 
@@ -65,7 +66,7 @@ export class KiroService {
     });
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Failed to start device authorization: ${error}`);
     }
 
@@ -155,7 +156,7 @@ export class KiroService {
     });
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Token exchange failed: ${error}`);
     }
 
@@ -192,7 +193,7 @@ export class KiroService {
       });
 
       if (!response.ok) {
-        const error = await response.text();
+        const error = await safeErrorText(response);
         throw new Error(`Token refresh failed: ${error}`);
       }
 
@@ -216,7 +217,7 @@ export class KiroService {
     });
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Token refresh failed: ${error}`);
     }
 
@@ -275,7 +276,7 @@ export class KiroService {
     });
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Failed to list models: ${error}`);
     }
 

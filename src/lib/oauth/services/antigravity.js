@@ -4,6 +4,7 @@ import { ANTIGRAVITY_CONFIG } from "../constants/oauth.js";
 import { getServerCredentials } from "../config/index.js";
 import { startLocalServer } from "../utils/server.js";
 import { spinner as createSpinner } from "../utils/ui.js";
+import { safeErrorText } from "../utils/sanitizeError.js";
 
 /**
  * Antigravity OAuth Service
@@ -51,7 +52,7 @@ export class AntigravityService {
     });
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Token exchange failed: ${error}`);
     }
 
@@ -70,7 +71,7 @@ export class AntigravityService {
     });
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Failed to get user info: ${error}`);
     }
 
@@ -113,7 +114,7 @@ export class AntigravityService {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = await safeErrorText(response);
       throw new Error(`Failed to load code assist: ${errorText}`);
     }
 
@@ -150,7 +151,7 @@ export class AntigravityService {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = await safeErrorText(response);
       throw new Error(`Failed to onboard user: ${errorText}`);
     }
 

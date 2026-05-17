@@ -7,6 +7,7 @@
 import "open-sse/index.js";
 
 import { generatePKCE, generateState } from "./utils/pkce";
+import { safeErrorText } from "./utils/sanitizeError.js";
 import {
   CLAUDE_CONFIG,
   CODEX_CONFIG,
@@ -109,7 +110,7 @@ const PROVIDERS = {
       });
 
       if (!response.ok) {
-        const error = await response.text();
+        const error = await safeErrorText(response);
         throw new Error(`Token exchange failed: ${error}`);
       }
 
@@ -161,7 +162,7 @@ const PROVIDERS = {
       });
 
       if (!response.ok) {
-        const error = await response.text();
+        const error = await safeErrorText(response);
         throw new Error(`Token exchange failed: ${error}`);
       }
 
@@ -217,7 +218,7 @@ const PROVIDERS = {
       });
 
       if (!response.ok) {
-        const error = await response.text();
+        const error = await safeErrorText(response);
         throw new Error(`Token exchange failed: ${error}`);
       }
 
@@ -299,7 +300,7 @@ const PROVIDERS = {
       });
 
       if (!response.ok) {
-        const error = await response.text();
+        const error = await safeErrorText(response);
         throw new Error(`Token exchange failed: ${error}`);
       }
 
@@ -422,7 +423,7 @@ const PROVIDERS = {
       });
 
       if (!response.ok) {
-        const error = await response.text();
+        const error = await safeErrorText(response);
         throw new Error(`Token exchange failed: ${error}`);
       }
 
@@ -506,7 +507,7 @@ const PROVIDERS = {
       });
 
       if (!response.ok) {
-        const error = await response.text();
+        const error = await safeErrorText(response);
         throw new Error(`Token exchange failed: ${error}`);
       }
 
@@ -571,7 +572,7 @@ const PROVIDERS = {
       });
 
       if (!response.ok) {
-        const error = await response.text();
+        const error = await safeErrorText(response);
         throw new Error(`Device code request failed: ${error}`);
       }
 
@@ -622,7 +623,7 @@ const PROVIDERS = {
       });
 
       if (!response.ok) {
-        const error = await response.text();
+        const error = await safeErrorText(response);
         throw new Error(`Device code request failed: ${error}`);
       }
 
@@ -648,8 +649,8 @@ const PROVIDERS = {
         data = await response.json();
       } catch (e) {
         // If response is not JSON, get as text
-        const text = await response.text();
-        data = { error: "invalid_response", error_description: text };
+        const errorText = await safeErrorText(response);
+        data = { error: "invalid_response", error_description: errorText };
       }
 
       return {
@@ -791,8 +792,8 @@ const PROVIDERS = {
       try {
         data = await response.json();
       } catch (e) {
-        const text = await response.text();
-        data = { error: "invalid_response", error_description: text };
+        const errorText = await safeErrorText(response);
+        data = { error: "invalid_response", error_description: errorText };
       }
 
       // AWS SSO OIDC returns camelCase
@@ -868,7 +869,7 @@ const PROVIDERS = {
         body: new URLSearchParams({ client_id: config.clientId }),
       });
       if (!response.ok) {
-        const error = await response.text();
+        const error = await safeErrorText(response);
         throw new Error(`Device code request failed: ${error}`);
       }
       const data = await response.json();
@@ -897,8 +898,8 @@ const PROVIDERS = {
       try {
         data = await response.json();
       } catch (e) {
-        const text = await response.text();
-        data = { error: "invalid_response", error_description: text };
+        const errorText = await safeErrorText(response);
+        data = { error: "invalid_response", error_description: errorText };
       }
       return { ok: response.ok, data };
     },
@@ -921,8 +922,8 @@ const PROVIDERS = {
         if (response.status === 429) {
           throw new Error("Too many pending authorization requests. Please try again later.");
         }
-        const error = await response.text();
-        throw new Error(`Device auth initiation failed: ${error}`);
+const error = await safeErrorText(response);
+      throw new Error(`Device auth initiation failed: ${error}`);
       }
       const data = await response.json();
       return {
@@ -1002,9 +1003,9 @@ const PROVIDERS = {
           body: JSON.stringify({ grant_type: "authorization_code", code, client_type: "extension", redirect_uri: redirectUri }),
         });
         if (!response.ok) {
-          const error = await response.text();
-          throw new Error(`Cline token exchange failed: ${error}`);
-        }
+        const error = await safeErrorText(response);
+        throw new Error(`Cline token exchange failed: ${error}`);
+      }
         const data = await response.json();
         return {
           access_token: data.data?.accessToken || data.accessToken,
@@ -1060,7 +1061,7 @@ const PROVIDERS = {
         headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
         body: body.toString(),
       });
-      if (!response.ok) throw new Error(`GitLab token exchange failed: ${await response.text()}`);
+      if (!response.ok) throw new Error(`GitLab token exchange failed: ${await safeErrorText(response)}`);
       const tokens = await response.json();
       // Fetch user info
       const userRes = await fetch(`${baseUrl}${config.userInfoUrlPath}`, {
@@ -1107,7 +1108,7 @@ const PROVIDERS = {
         },
         body: "{}",
       });
-      if (!response.ok) throw new Error(`CodeBuddy state request failed: ${await response.text()}`);
+      if (!response.ok) throw new Error(`CodeBuddy state request failed: ${await safeErrorText(response)}`);
       const data = await response.json();
       if (data.code !== 0 || !data.data?.state || !data.data?.authUrl) {
         throw new Error(`CodeBuddy state error: ${data.msg || "missing state/authUrl"}`);

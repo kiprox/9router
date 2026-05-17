@@ -2,6 +2,7 @@ import open from "open";
 import { startLocalServer } from "../utils/server.js";
 import { generatePKCE } from "../utils/pkce.js";
 import { spinner as createSpinner } from "../utils/ui.js";
+import { safeErrorText } from "../utils/sanitizeError.js";
 import { OAUTH_TIMEOUT } from "../constants/oauth.js";
 
 /**
@@ -112,7 +113,7 @@ export class OAuthService {
     });
 
     if (!response.ok) {
-      const error = await response.text();
+      const error = await safeErrorText(response);
       throw new Error(`Token exchange failed: ${error}`);
     }
 
