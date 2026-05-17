@@ -436,8 +436,11 @@ async function scheduleMitmRestart(apiKey) {
   } catch (e) {
     err(`Restart attempt ${mitmRestartCount}/${MITM_MAX_RESTARTS} failed: ${e.message}`);
     mitmIsRestarting = false;
-    // Schedule next retry
-    scheduleMitmRestart(apiKey);
+    if (mitmRestartCount < MITM_MAX_RESTARTS) {
+      scheduleMitmRestart(apiKey);
+    } else {
+      err("Max restart attempts reached after failure. Giving up.");
+    }
   }
 }
 
