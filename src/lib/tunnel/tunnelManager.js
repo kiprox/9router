@@ -153,10 +153,10 @@ export async function enableTunnel(localPort = 20128) {
     await updateSettings({ tunnelEnabled: true, tunnelUrl });
     console.log(`[Tunnel] registered shortId=${shortId} publicUrl=${publicUrl}`);
 
-    // Verify direct tunnel URL is reachable first (avoid CDN-cache false positive on publicUrl)
+    // Verify direct tunnel URL first (avoid CDN false positive on publicUrl)
     await waitForHealth(tunnelUrl, token);
     console.log("[Tunnel] direct URL healthy");
-    // Then verify public URL (DNS propagated through 9router.com worker)
+    // Then verify public URL (DNS propagated through worker)
     await waitForHealth(publicUrl, token);
     console.log("[Tunnel] public URL healthy");
 
