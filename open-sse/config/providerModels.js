@@ -501,10 +501,12 @@ export const PROVIDER_MODELS = {
     { id: "command-a-03-2025", name: "Command A (Mar 2025)" },
   ],
   nvidia: [
+    { id: "openai/gpt-oss-20b", name: "GPT Oss 20B" },
+    { id: "openai/gpt-oss-120b", name: "GPT Oss 120B" },
     { id: "qwen/qwen3.5-122b-a10b", name: "Qwen 3.5 122B-A10B" },
-    { id: "openai/gpt-oss-20b", name: "GPT OSS 20B" },
-    { id: "openai/gpt-oss-120b", name: "GPT OSS 120B" },
-    { id: "minimaxai/minimax-m2.7", name: "Minimax M2.7" },
+    { id: "deepseek-ai/deepseek-v4-flash", name: "Deepseek V4 Flash" },
+    { id: "moonshotai/kimi-k2.6", name: "Kimi K2.6" },
+    { id: "z-ai/glm-5.1", name: "GLM 5.1" },
     { id: "z-ai/glm4.7", name: "GLM 4.7" },
     { id: "nvidia/nv-embedqa-e5-v5", name: "NV EmbedQA E5 v5", type: "embedding" },
     // STT models
