@@ -125,7 +125,10 @@ export default function HeaderMenu({ onLogout }) {
 
       <ChangelogModal isOpen={changelogOpen} onClose={() => setChangelogOpen(false)} />
       <NineRemotePromoModal isOpen={remoteOpen} onClose={() => setRemoteOpen(false)} />
-      <LanguageSwitcher hideTrigger isOpen={langOpen} onClose={() => setLangOpen(false)} />
+      <LanguageSwitcher hideTrigger isOpen={langOpen} onClose={((locale) => {
+        setLangOpen(false)
+        setLocale(locale)
+      })} />
     </>
   );
 }
