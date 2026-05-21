@@ -6,7 +6,7 @@ import { cleanupProviderConnections, getSettings, updateSettings, getApiKeys } f
 import {
   enableTunnel, enableTailscale,
   isTunnelManuallyDisabled, isTunnelReconnecting, isTailscaleReconnecting,
-  getTunnelService, getTailscaleService,
+  getTunnelService, getTailscaleService, setTunnelUnexpectedExitCallback,
 } from "@/lib/tunnel/tunnelManager";
 import { killCloudflared, isCloudflaredRunning, ensureCloudflared } from "@/lib/tunnel/cloudflared";
 import { isTailscaleRunning } from "@/lib/tunnel/tailscale";
@@ -83,6 +83,11 @@ export async function initializeApp() {
     // Sync mitmAlias DB → JSON cache so standalone MITM server can read it
     syncMitmAliasCache().catch(() => {});
 
+    // Auto-respawn tunnel when cloudflared exits unexpectedly (e.g. network change drop)
+    setTunnelUnexpectedExitCallback(() => {
+      safeRestartTunnel("unexpected-exit").catch(() => {});
+    });
+
     startWatchdog();
     startNetworkMonitor();
     autoStartMitm();
@@ -133,9 +138,11 @@ async function safeRestartTunnel(reason) {
   if (!settings.tunnelEnabled) return;
   if (svc.cancelToken.cancelled) return;
   if (svc.spawnInProgress) return;
-  if (Date.now() - svc.lastRestartAt < RESTART_COOLDOWN_MS) return;
+  // Bypass cooldown when process is dead (real respawn, not restart-loop guard)
+  const processDead = !isCloudflaredRunning();
+  if (!processDead && Date.now() - svc.lastRestartAt < RESTART_COOLDOWN_MS) return;
 
-  // Alive check: process up + URL responds → skip
+  // Alive check: process up + BOTH direct & public URL respond → skip
   if (isCloudflaredRunning()) {
     const state = loadState();
     const publicDomain = process.env.PUBLIC_DOMAIN || process.env.TUNNEL_PUBLIC_DOMAIN || "9router.com";
