@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { enableTunnel } from "@/lib/tunnel/tunnelManager";
 
+export const dynamic = 'force-dynamic';
+
 const DNS_WARMUP_DELAY_MS = 8000;
 
 export async function POST() {
