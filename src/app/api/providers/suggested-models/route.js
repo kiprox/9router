@@ -18,6 +18,11 @@ const FILTERS = {
     models
       .filter((m) => m.id?.endsWith("-free"))
       .map((m) => ({ id: m.id, name: m.id })),
+
+  "nvidia-nim": (models) =>
+    models
+      .filter((m) => !m.id?.toLowerCase().includes("embed") && !m.id?.toLowerCase().includes("asr"))
+      .map((m) => ({ id: m.id, name: m.name || m.id })),
 };
 
 export async function GET(request) {
