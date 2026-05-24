@@ -862,8 +862,8 @@ export default function ProviderDetailPage() {
         const modelId = fullModel.slice(prefix.length);
         // Only show if not already in hardcoded list
         // For passthroughModels, include all aliases (model IDs may contain slashes like "anthropic/claude-3")
-        if (providerInfo.passthroughModels) return !models.some((m) => m.id === modelId);
-        return !models.some((m) => m.id === modelId) && alias === modelId;
+        if (providerInfo.passthroughModels) return !models.some((m) => m.id === modelId) && !disabledSet.has(modelId);
+        return !models.some((m) => m.id === modelId) && alias === modelId && !disabledSet.has(modelId);
       })
       .map(([alias, fullModel]) => ({
         id: fullModel.slice(`${providerStorageAlias}/`.length),
@@ -931,7 +931,7 @@ export default function ProviderDetailPage() {
           const addedFullModels = new Set(Object.values(modelAliases));
           const hardcodedIds = new Set(models.map((m) => m.id));
           const notAdded = suggestedModels.filter(
-            (m) => !addedFullModels.has(`${providerStorageAlias}/${m.id}`) && !hardcodedIds.has(m.id)
+            (m) => !addedFullModels.has(`${providerStorageAlias}/${m.id}`) && !hardcodedIds.has(m.id) && !disabledSet.has(m.id)
           );
           if (notAdded.length === 0) return null;
           return (
