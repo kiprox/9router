@@ -1,0 +1,17 @@
+#!/bin/sh
+# Same as post-merge — removes new files added by remote in protected dirs
+# Runs after rebase/amend (reads the rewritten commits from stdin)
+
+if [ "$1" = "rebase" ]; then
+  PROTECTED_DIRS="
+public/i18n/literals
+"
+
+  # After rebase, HEAD@{1} points to pre-rebase state
+  PREV_HEAD=$(git rev-parse HEAD@{1} 2>/dev/null) || exit 0
+
+  git diff "$PREV_HEAD" HEAD --diff-filter=A --name-only -- $PROTECTED_DIRS | while read -r file; do
+    git rm --cached --quiet "$file" 2>/dev/null
+    rm -f "$file"
+  done
+fi

@@ -1,0 +1,14 @@
+#!/bin/sh
+# Remove files newly added by remote in protected directories
+# Only runs after successful merges (skipped on conflicts)
+
+PROTECTED_DIRS="
+public/i18n/literals
+"
+
+PREV_HEAD=$(git rev-parse HEAD@{1} 2>/dev/null) || exit 0
+
+git diff "$PREV_HEAD" HEAD --diff-filter=A --name-only -- $PROTECTED_DIRS | while read -r file; do
+  git rm --cached --quiet "$file" 2>/dev/null
+  rm -f "$file"
+done
