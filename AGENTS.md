@@ -7,6 +7,7 @@
 - `gitbook/`: independent Next.js docs site, own `package.json`; static export (`output: "export"`) deployed to external repo `9router/9router.github.io` via GH Pages.
 - `cloudflare/worker/`: Cloudflare Worker for tunnel registration (KV-backed). Deployed separately via Wrangler.
 - `tests/unit/`: vitest test files — **vitest is not in root package.json**, tests are non-functional as-is.
+- Entire codebase is plain JS (no TypeScript).
 
 ## Commands
 ```bash
@@ -35,10 +36,10 @@ npm run publish:cli # build + npm publish
 
 ## Architecture & runtime gotchas
 - Port `20128` hard-coded in scripts and Dockerfile `PORT` env; change both if updating.
-- `next.config.mjs` has `DO NOT CHANGE - dont stage this` comment — do not commit changes to it.
+- `next.config.mjs` has Indonesian-language comments marking items that must not be changed — do not stage edits to this file.
 - Rewrites: `/v1/*` & `/codex/*` → `/api/v1/*`; `/v1/v1/*` intentional duplicate for Codex CLI compat.
 - `initializeApp` uses `global.__appSingleton` to survive Next.js hot reload; registers SIGINT/SIGTERM cleanup for DNS & cloudflared.
-- MITM server (`src/mitm/server.js`) binds port 443 (port 8443 on Windows); requires sudo/admin for DNS hosts-file edits.
+- MITM server (`src/mitm/server.js`) binds port 443 on all platforms; requires sudo/admin for DNS hosts-file edits.
 - MITM manager (`src/mitm/manager.js`) is CJS; ESM bootstrap in `initializeApp.js` injects `process.env.MITM_SERVER_PATH` and calls `initDbHooks`.
 - MITM server.js is copied from `node_modules` to `DATA_DIR/runtime/mitm/` at startup to avoid locking the install dir.
 - OAuth client secrets moved to env vars: `GEMINI_OAUTH_CLIENT_SECRET`, `IFLOW_OAUTH_CLIENT_SECRET`, `ANTIGRAVITY_OAUTH_CLIENT_SECRET` (see `docs/SECRETS.md`).
@@ -50,7 +51,7 @@ npm run publish:cli # build + npm publish
 - `better-sqlite3` is **optionalDependency** (native build may fail; sql.js fallback at runtime).
 - Data directory: `DATA_DIR` env or `~/.9router` (Windows `%APPDATA%\9router`). Unwritable `DATA_DIR` falls back to default (`src/lib/dataDir.js`).
 - Docker sets `DATA_DIR=/app/data`.
-- **usageDb stores at `~/.9router/usage.json` and `~/.9router/log.txt` — does NOT follow `DATA_DIR`** (known architectural issue).
+- Usage data now in SQLite (`${DATA_DIR}/db/data.sqlite`) alongside main state. `src/lib/usageDb.js` is a shim re-exporting from `src/lib/db/repos/usageRepo.js`.
 
 ## Webpack config quirks (next.config.mjs)
 - `serverExternalPackages`: `better-sqlite3`, `sql.js`, `node:sqlite`, `bun:sqlite`, `node-forge`, `ssh2`, `node-ssh`.
@@ -67,14 +68,14 @@ npm run publish:cli # build + npm publish
 ## CI / release
 - Docker: push to GHCR + Docker Hub on `v*` tag or manual dispatch (`.github/workflows/docker-publish.yml`); Node 22-alpine, multi-platform (amd64/arm64).
 - GitBook: deploy on changes under `gitbook/` (`.github/workflows/gitbook-pages.yml`); Node 24; pushes static export to external `9router/9router.github.io` repo.
-- NPM publish: triggered by GitHub Release (`.github/workflows/npm-publish.yml`); Node 20; publishes root app (private — likely misconfigured), not `cli/`. The CLI is published manually via `cli/ $ npm run publish:cli`.
+- Root npm-publish will fail (`"private": true`); CLI is published manually via `cli/ $ npm run publish:cli`.
 - Docker `output: "standalone"` bundles `.next/standalone`, `open-sse/`, `src/mitm/`, `src/shared/`, `src/lib/`, and native/wasm deps (`better-sqlite3`, `sql.js`, `node-forge`).
 
 ## Key source layout
 - API routes: `src/app/api/v1/*` (compat), `src/app/api/*` (management), `src/app/api/oauth/*` (auth flows).
 - SSE core: `src/sse/handlers/chat.js` (entry) → `open-sse/handlers/chatCore.js` (orchestration) → `open-sse/executors/*` (provider calls).
 - Translator: `open-sse/translator/` (request/response format converters).
-- Persistence: `src/lib/localDb.js` (config/state), `src/lib/usageDb.js` (usage history/logs).
+- Persistence: `src/lib/localDb.js` (config/state), `src/lib/usageDb.js` (usage history/logs). Both are shims re-exporting from the SQLite DB layer at `src/lib/db/`.
 - Security: `src/proxy.js` + `src/dashboardGuard.js` (dashboard auth middleware).
 - Auth: `src/lib/auth/dashboardSession.js` (JWT), `src/lib/oauth/` (OAuth flows).
 - Dashboard pages: `src/app/dashboard/`, `src/app/login/`, `src/app/landing/`.
