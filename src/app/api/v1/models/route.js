@@ -5,8 +5,9 @@ import {
   isAnthropicCompatibleProvider,
   isOpenAICompatibleProvider,
 } from "@/shared/constants/providers";
-import { getProviderConnections, getCombos, getCustomModels, getModelAliases } from "@/lib/localDb";
+import { getProviderConnections, getCombos, getCustomModels, getModelAliases, getSettings } from "@/lib/localDb";
 import { getDisabledModels } from "@/lib/disabledModelsDb";
+import { extractApiKey, isValidApiKey } from "../../../../sse/services/auth.js";
 import { resolveKiroModels } from "open-sse/services/kiroModels.js";
 
 // Per-provider live model resolvers. Each receives a connection record and
@@ -416,8 +417,26 @@ export async function OPTIONS() {
  * GET /v1/models - OpenAI compatible models list (LLM/chat models only by default).
  * For other capabilities use /v1/models/{kind} (image, tts, stt, embedding, image-to-text, web).
  */
-export async function GET() {
+export async function GET(request) {
   try {
+    const settings = await getSettings();
+    if (settings.requireApiKey) {
+      const apiKey = extractApiKey(request);
+      if (!apiKey) {
+        return Response.json(
+          { error: { message: "Missing API key", type: "auth_error" } },
+          { status: 401, headers: { "Access-Control-Allow-Origin": "*" } }
+        );
+      }
+      const valid = await isValidApiKey(apiKey);
+      if (!valid) {
+        return Response.json(
+          { error: { message: "Invalid API key", type: "auth_error" } },
+          { status: 401, headers: { "Access-Control-Allow-Origin": "*" } }
+        );
+      }
+    }
+
     const data = await buildModelsList([LLM_KIND]);
     return Response.json({ object: "list", data }, {
       headers: { "Access-Control-Allow-Origin": "*" },
