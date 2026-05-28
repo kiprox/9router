@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { disableTailscale } from "@/lib/tunnel/tunnelManager";
+import { disableTailscale } from "@/lib/tunnel";
 
 export const dynamic = 'force-dynamic';
 

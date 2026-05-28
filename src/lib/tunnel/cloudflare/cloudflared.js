@@ -4,7 +4,7 @@ import https from "https";
 import os from "os";
 import crypto from "crypto";
 import { execSync, spawn } from "child_process";
-import { savePid, loadPid, clearPid } from "./state.js";
+import { savePid, loadPid, clearPid } from "./pid.js";
 import { DATA_DIR } from "@/lib/dataDir.js";
 
 const BIN_DIR = path.join(DATA_DIR, "bin");
