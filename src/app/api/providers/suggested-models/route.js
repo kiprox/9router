@@ -3,29 +3,6 @@ import { FILTERS } from "./filters.js";
 
 export const dynamic = "force-dynamic";
 
-const FILTERS = {
-  "openrouter-free": (models) =>
-    models
-      .filter(
-        (m) =>
-          m.pricing?.prompt === "0" &&
-          m.pricing?.completion === "0" &&
-          m.context_length >= 200000
-      )
-      .map((m) => ({ id: m.id, name: m.name, contextLength: m.context_length }))
-      .sort((a, b) => b.contextLength - a.contextLength),
-
-  "opencode-free": (models) =>
-    models
-      .filter((m) => m.id?.endsWith("-free"))
-      .map((m) => ({ id: m.id, name: m.id })),
-
-  "nvidia-nim": (models) =>
-    models
-      .filter((m) => !m.id?.toLowerCase().includes("embed") && !m.id?.toLowerCase().includes("asr"))
-      .map((m) => ({ id: m.id, name: m.name || m.id })),
-};
-
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const url = searchParams.get("url");
