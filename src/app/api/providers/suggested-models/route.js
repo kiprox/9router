@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { FILTERS } from "./filters.js";
 
 export const dynamic = "force-dynamic";
 

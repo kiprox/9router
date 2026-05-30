@@ -8,7 +8,7 @@ import {
   isTunnelManuallyDisabled, isTunnelReconnecting, isTailscaleReconnecting,
   getTunnelService, getTailscaleService, setTunnelUnexpectedExitCallback,
   killCloudflared, isCloudflaredRunning, ensureCloudflared,
-  isTailscaleRunning,
+  isTailscaleRunning, isTailscaleRunningStrict,
   loadState,
   checkInternet,
   probeCloudflareAlive, probeTailscaleAlive,
@@ -142,9 +142,14 @@ async function safeRestartTunnel(reason) {
   if (svc.cancelToken.cancelled) return;
   if (svc.spawnInProgress) return;
 
-  // Alive check FIRST: probe URLs to decide health (process up but tunnel 530 = dead)
-  let alive = false;
-  if (isCloudflaredRunning()) {
+  const force = FORCE_RESTART_REASONS.test(reason);
+
+  // Watchdog: process alive = trust it (cloudflared self-retries via --retries 99).
+  // Avoids killing a healthy tunnel on transient HTTP probe failures (app busy / slow DNS).
+  if (!force && isCloudflaredRunning()) return;
+
+  // Force reasons (netchange/sleep/online): process may be up but routing stale → probe to confirm
+  if (force && isCloudflaredRunning()) {
     const state = loadState();
     const publicDomain = process.env.PUBLIC_DOMAIN || process.env.TUNNEL_PUBLIC_DOMAIN || "9router.com";
     const publicUrl = state?.shortId ? `https://r${state.shortId}.${publicDomain}` : null;
@@ -159,7 +164,9 @@ async function safeRestartTunnel(reason) {
     svc.lastRestartAt = Date.now();
     console.log("[Tunnel] restart success");
   } catch (err) {
-    console.log("[Tunnel] restart failed:", err.message);
+    if (!/cloudflared killed|tunnel cancelled/.test(err.message)) {
+      console.log("[Tunnel] restart failed:", err.message);
+    }
   }
 }
 
@@ -170,12 +177,10 @@ async function safeRestartTailscale(reason) {
   if (svc.cancelToken.cancelled) return;
   if (svc.spawnInProgress) return;
 
-  // Alive check FIRST: daemon up + URL responds = healthy
-  let alive = false;
-  if (isTailscaleRunning() && settings.tailscaleUrl) {
-    alive = await probeTailscaleAlive(settings.tailscaleUrl);
-  }
-  if (alive) return;
+  // Tailscale daemon is OS-level with built-in reconnect; trust it when running.
+  // Startup uses strict probe — cached state is cold after process/dev reload.
+  const running = reason === "startup" ? isTailscaleRunningStrict() : isTailscaleRunning();
+  if (running) return;
 
   const force = FORCE_RESTART_REASONS.test(reason);
   if (!force && Date.now() - svc.lastRestartAt < RESTART_COOLDOWN_MS) {
@@ -184,7 +189,7 @@ async function safeRestartTailscale(reason) {
   }
   if (!await checkInternet()) return;
 
-  console.log(`[Tailscale] safeRestart (${reason}) — tunnel unreachable${force ? " [force]" : ""}`);
+  console.log(`[Tailscale] safeRestart (${reason}) — daemon not running${force ? " [force]" : ""}`);
   try {
     await enableTailscale();
     svc.lastRestartAt = Date.now();

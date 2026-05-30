@@ -634,47 +634,56 @@ const PROVIDERS = {
         const error = await safeErrorText(response);
         throw new Error(`Token exchange failed: ${error}`);
       }
-
-      return await response.json();
+      if (result.status === "pending") {
+        return { ok: false, data: { error: "authorization_pending" } };
+      }
+      // Best-effort profile lookup so we have a name/email to display.
+      const userInfo = await svc.fetchUserInfo(result.accessToken);
+      // expireTime is a Unix-ms timestamp from QoderService.parseExpiry,
+      // which already falls back to "now + 30 days" when the upstream
+      // omits expiry. Floor to a sane minimum (1 day) so a stale or
+      // skewed upstream timestamp doesn't truncate the stored token below
+      // something useful.
+      const minSeconds = 24 * 60 * 60;
+      const remainingSeconds = Math.floor((result.expireTime - Date.now()) / 1000);
+      const expiresIn = Math.max(minSeconds, remainingSeconds);
+      return {
+        ok: true,
+        data: {
+          access_token: result.accessToken,
+          refresh_token: result.refreshToken,
+          expires_in: expiresIn,
+          _qoderUserId: result.userId,
+          _qoderMachineId: extraData?._qoderMachineId || "",
+          _qoderName: userInfo.name,
+          _qoderEmail: userInfo.email,
+          _qoderOrganizationId: userInfo.organizationId,
+        },
+      };
     },
-    postExchange: async (tokens) => {
-      // Fetch user info (MUST succeed to get API key)
-      const userInfoRes = await fetch(
-        `${QODER_CONFIG.userInfoUrl}?accessToken=${encodeURIComponent(tokens.access_token)}`,
-        { headers: { Accept: "application/json" } }
-      );
-
-      if (!userInfoRes.ok) {
-        const errorText = await userInfoRes.text();
-        throw new Error(`Failed to fetch user info: ${errorText}`);
-      }
-
-      const result = await userInfoRes.json();
-      if (!result.success) {
-        throw new Error(`User info request failed: ${result.message || "Unknown error"}`);
-      }
-
-      const userInfo = result.data || {};
-
-      if (!userInfo.apiKey || userInfo.apiKey.trim() === "") {
-        throw new Error("Empty API key returned from Qoder");
-      }
-
-      const email = userInfo.email?.trim() || userInfo.phone?.trim();
-      if (!email) {
-        throw new Error("Missing account email/phone in user info");
-      }
-
-      return { userInfo };
+    mapTokens: (tokens) => {
+      const rawEmail = (tokens._qoderEmail || "").trim();
+      const displayName = (tokens._qoderName || "").trim() || null;
+      const userId = tokens._qoderUserId || "";
+      // Dedup in createProviderConnection requires a non-empty email. When
+      // fetchUserInfo silently fails (returns ""), fall back to a stable
+      // synthetic identifier derived from userId so re-logins update the
+      // existing row instead of accumulating "Account N" duplicates.
+      const email = rawEmail || (userId ? `qoder-user-${userId}` : null);
+      return {
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token || null,
+        expiresIn: tokens.expires_in,
+        email,
+        displayName,
+        providerSpecificData: {
+          authMethod: "device",
+          userId,
+          machineId: tokens._qoderMachineId || "",
+          organizationId: tokens._qoderOrganizationId || "",
+        },
+      };
     },
-    mapTokens: (tokens, extra) => ({
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresIn: tokens.expires_in,
-      apiKey: extra?.userInfo?.apiKey,
-      email: extra?.userInfo?.email || extra?.userInfo?.phone,
-      displayName: extra?.userInfo?.nickname || extra?.userInfo?.name,
-    }),
   },
 
   qwen: {
