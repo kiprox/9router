@@ -6,6 +6,7 @@ import Link from "next/link";
 import PropTypes from "prop-types";
 import ProviderIcon from "@/shared/components/ProviderIcon";
 import HeaderMenu from "@/shared/components/HeaderMenu";
+import HeaderLanguage from "@/shared/components/HeaderLanguage";
 import ThemeToggle from "@/shared/components/ThemeToggle";
 import { useHeaderSearchStore } from "@/store/headerSearchStore";
 import { OAUTH_PROVIDERS, APIKEY_PROVIDERS } from "@/shared/constants/config";
@@ -305,6 +306,7 @@ export default function Header({ onMenuClick, showMenuButton = true }) {
         )}
         <HeaderSearch />
         <ThemeToggle />
+        <HeaderLanguage />
         <HeaderMenu onLogout={handleLogout} />
       </div>
     </header>

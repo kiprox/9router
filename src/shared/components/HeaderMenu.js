@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 import PropTypes from "prop-types";
-import { LOCALE_COOKIE, normalizeLocale } from "@/i18n/config";
 import { useTheme } from "@/shared/hooks/useTheme";
 import ChangelogModal from "./ChangelogModal";
 import NineRemotePromoModal from "./NineRemotePromoModal";
@@ -59,9 +58,16 @@ export default function HeaderMenu({ onLogout }) {
   const { toggleTheme, isDark } = useTheme();
   const menuRef = useRef(null);
 
-  useEffect(() => {
-    setLocale(getLocaleFromCookie());
-  }, [langOpen]);
+  const handleShutdown = async () => {
+    setIsShuttingDown(true);
+    try {
+      await fetch("/api/version/shutdown", { method: "POST" });
+    } catch (e) {
+      // Expected to fail as server shuts down; ignore error
+    }
+    setIsShuttingDown(false);
+    setShutdownOpen(false);
+  };
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -96,21 +102,16 @@ export default function HeaderMenu({ onLogout }) {
               onClick={() => { close(); setChangelogOpen(true); }}
             />
             <MenuItem
-              icon="language"
-              label={LOCALE_INFO[locale]?.name || locale}
-              trailing={LOCALE_INFO[locale]?.flag || "🌐"}
-              onClick={() => { close(); setLangOpen(true); }}
-            />
-            <MenuItem
               icon={isDark ? "light_mode" : "dark_mode"}
               label="Theme"
               onClick={() => { toggleTheme(); close(); }}
             />
             {/*
             <MenuItem
-              icon="computer"
-              label="Remote"
-              onClick={() => { close(); setRemoteOpen(true); }}
+              icon="power_settings_new"
+              label="Shutdown"
+              danger
+              onClick={() => { close(); setShutdownOpen(true); }}
             />
             */}
             <MenuItem
@@ -124,11 +125,17 @@ export default function HeaderMenu({ onLogout }) {
       </div>
 
       <ChangelogModal isOpen={changelogOpen} onClose={() => setChangelogOpen(false)} />
-      <NineRemotePromoModal isOpen={remoteOpen} onClose={() => setRemoteOpen(false)} />
-      <LanguageSwitcher hideTrigger isOpen={langOpen} onClose={((locale) => {
-        setLangOpen(false)
-        setLocale(locale)
-      })} />
+      <ConfirmModal
+        isOpen={shutdownOpen}
+        onClose={() => setShutdownOpen(false)}
+        onConfirm={handleShutdown}
+        title="Close Proxy"
+        message="Are you sure you want to close the proxy server?"
+        confirmText="Close"
+        cancelText="Cancel"
+        variant="danger"
+        loading={isShuttingDown}
+      />
     </>
   );
 }

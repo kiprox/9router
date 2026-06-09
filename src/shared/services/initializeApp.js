@@ -9,11 +9,9 @@ import {
   getTunnelService, getTailscaleService, setTunnelUnexpectedExitCallback,
   killCloudflared, isCloudflaredRunning, ensureCloudflared,
   isTailscaleRunning, isTailscaleRunningStrict,
-  loadState,
   checkInternet,
-  probeCloudflareAlive, probeTailscaleAlive,
   RESTART_COOLDOWN_MS, NETWORK_SETTLE_MS,
-  WATCHDOG_INTERVAL_MS, NETWORK_CHECK_INTERVAL_MS,
+  WATCHDOG_INTERVAL_MS, NETWORK_CHECK_INTERVAL_MS, VIRTUAL_IFACE_REGEX,
 } from "@/lib/tunnel";
 import { getMitmStatus, startMitm, loadEncryptedPassword, initDbHooks, restoreToolDNS, removeAllDNSEntriesSync } from "@/mitm/manager";
 import { syncToJson as syncMitmAliasCache } from "@/lib/mitmAliasCache";
@@ -177,7 +175,7 @@ async function safeRestartTailscale(reason) {
   if (svc.cancelToken.cancelled) return;
   if (svc.spawnInProgress) return;
 
-  // Tailscale daemon is OS-level with built-in reconnect; trust it when running.
+  // Tailscale daemon is OS-level with built-in reconnect; trust it when running (even on netchange).
   // Startup uses strict probe — cached state is cold after process/dev reload.
   const running = reason === "startup" ? isTailscaleRunningStrict() : isTailscaleRunning();
   if (running) return;
@@ -217,6 +215,7 @@ function getNetworkFingerprint() {
   const active = [];
   for (const [name, addrs] of Object.entries(interfaces)) {
     if (!addrs) continue;
+    if (VIRTUAL_IFACE_REGEX.test(name)) continue;
     for (const addr of addrs) {
       if (!addr.internal && addr.family === "IPv4") {
         active.push(`${name}:${addr.address}`);

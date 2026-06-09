@@ -19,6 +19,10 @@ const nextConfig = {
     unoptimized: true
   },
   env: {},
+  experimental: {
+    // #1529/#1572: LLM clients can send long context or base64 image payloads through /v1 rewrites.
+    proxyClientMaxBodySize,
+  },
   webpack: (config, { isServer }) => {
     if (isServer) {
       // FIX UTAMA: Hapus alias crypto bawaan Next.js agar Node.js native crypto digunakan
