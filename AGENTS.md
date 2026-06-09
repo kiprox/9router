@@ -1,86 +1,99 @@
 # AGENTS.md
 
 ## Repo shape
-- Root (`sirouter`): private Next.js 16 app (React 19) — AI routing gateway + dashboard. Entry: `src/server-init.js` → `src/shared/services/initializeApp.js`.
-- `open-sse/`: provider/translator lib, imported via alias `open-sse/*` (see `jsconfig.json`). No own `package.json`; bundled with root app.
-- `cli/`: published npm package (`9router`), own `package.json`. Bundled via esbuild; postinstall hook installs runtime deps (sql.js, better-sqlite3, systray2) into `~/.9router/runtime/node_modules` to avoid EBUSY on global updates.
-- `gitbook/`: independent Next.js docs site, own `package.json`; static export (`output: "export"`) deployed to external repo `9router/9router.github.io` via GH Pages.
-- `cloudflare/worker/`: Cloudflare Worker for tunnel registration (KV-backed). Deployed separately via Wrangler.
-- `tests/unit/`: vitest test files — **vitest is not in root package.json**, tests are non-functional as-is.
-- Entire codebase is plain JS (no TypeScript).
+
+- Root (`sirouter`): private Next.js 16 app (React 19) — AI routing gateway + dashboard. Plain JS (no TypeScript).
+- `open-sse/`: provider/translator lib, bundled with root app via alias `open-sse/*` (see `jsconfig.json`). No own `package.json`.
+- `cli/`: published npm package `9router`, own `package.json`. Bundled via esbuild (`node scripts/build-cli.js`). Not in root workspace.
+- `gitbook/`: independent Next.js docs site, own `package.json`; static export (`output: "export"`), deployed to `9router.github.io` via GH Pages.
+- `cloudflare/worker/`: Cloudflare Worker (KV-backed), deployed separately via Wrangler.
+- `tests/unit/`: vitest files — **vitest is not in root `package.json`**; `npm test` will fail.
 
 ## Commands
+
 ```bash
 # Root (Next.js app)
 npm run dev        # next dev --webpack --port 20128
 npm run build      # next build --webpack
-npm start          # next start (NODE_ENV=production via Dockerfile)
 npm run dev:bun    # bun --bun next dev --webpack --port 20128
 npm run build:bun  # bun --bun next build --webpack
 npm run start:bun  # bun ./.next/standalone/server.js
-npx eslint .       # flat config: eslint.config.mjs
+npx eslint .       # flat config: eslint.config.mjs (core-web-vitals preset)
 
-# There is no root npm test; CI npm-publish.yml runs `npm test` (will fail).
-
-# gitbook/ (run inside that dir)
+# gitbook/ (run from gitbook/ dir)
 npm run dev        # next dev -p 3001
 npm run build      # next build (static export → out/)
 
-# cli/ (run inside that dir)
+# cli/ (run from cli/ dir)
 npm run build      # node scripts/build-cli.js (esbuild bundle)
 npm run pack:cli   # build + npm pack --pack-destination ../..
 npm run publish:cli # build + npm publish
 ```
-- `npm run build` loads `.env.build` for build-time env vars.
-- Docker build: `output: "standalone"`, multi-platform (amd64/arm64), pushes to GHCR + Docker Hub on `v*` tag.
+
+- `.env.build` is a **reference** listing all env vars the app reads at runtime (not auto-loaded). Coolify loads it in deployment; for local dev, set vars manually or use `.env.local`.
+- No root `npm test` — CI npm-publish workflow runs `npm test` and will fail.
+
+## App initialization chain
+
+```
+src/app/layout.js  (side-effect import)
+  → src/shared/services/bootstrap.js
+    → src/shared/services/initializeApp.js
+      (watchdog, tunnel/Tailscale auto-resume, MITM auto-start, network monitor)
+```
+
+No `server-init.js` exists. The entrypoint is the Next.js router itself. `initializeApp` survives hot reload via `global.__appSingleton`.
 
 ## Architecture & runtime gotchas
-- Port `20128` hard-coded in scripts and Dockerfile `PORT` env; change both if updating.
-- `next.config.mjs` has Indonesian-language comments marking items that must not be changed — do not stage edits to this file.
-- Rewrites: `/v1/*` & `/codex/*` → `/api/v1/*`; `/v1/v1/*` intentional duplicate for Codex CLI compat.
-- `initializeApp` uses `global.__appSingleton` to survive Next.js hot reload; registers SIGINT/SIGTERM cleanup for DNS & cloudflared.
-- MITM server (`src/mitm/server.js`) binds port 443 on all platforms; requires sudo/admin for DNS hosts-file edits.
-- MITM manager (`src/mitm/manager.js`) is CJS; ESM bootstrap in `initializeApp.js` injects `process.env.MITM_SERVER_PATH` and calls `initDbHooks`.
-- MITM server.js is copied from `node_modules` to `DATA_DIR/runtime/mitm/` at startup to avoid locking the install dir.
-- OAuth client secrets moved to env vars: `GEMINI_OAUTH_CLIENT_SECRET`, `IFLOW_OAUTH_CLIENT_SECRET`, `ANTIGRAVITY_OAUTH_CLIENT_SECRET` (see `docs/SECRETS.md`).
-- `src/store/`: zustand stores for UI state (provider, settings, theme, user, notification, headerSearch).
-- `src/i18n/`: runtime i18n with config + React provider.
+
+- Port `20128` hard-coded in npm scripts and Dockerfile `PORT` env.
+- Rewrites (`next.config.mjs`): `/v1/*` & `/codex/*` → `/api/v1/*`; `/v1/v1/*` intentional duplicate for Codex CLI compat.
+- Auth middleware at `src/proxy.js` + `src/dashboardGuard.js` — file is NOT named `middleware.js` (unconventional, middleware won't run unless renamed). Implements API key, JWT, CLI token, local-only path checks.
+- MITM server (`src/mitm/server.js`) binds port 443; requires sudo/admin for DNS hosts-file edits. Copied from `node_modules` to `DATA_DIR/runtime/mitm/` at startup to avoid locking install dir.
+- `src/store/`: zustand stores (provider, settings, theme, user, notification, headerSearch).
+- `src/i18n/`: runtime i18n config + React provider.
 
 ## DB & data dir
-- SQLite driver order (`src/lib/db/driver.js`): Bun `bun:sqlite` → `better-sqlite3` → Node `node:sqlite` (≥22.5) → `sql.js` (fallback).
-- `better-sqlite3` is **optionalDependency** (native build may fail; sql.js fallback at runtime).
-- Data directory: `DATA_DIR` env or `~/.9router` (Windows `%APPDATA%\9router`). Unwritable `DATA_DIR` falls back to default (`src/lib/dataDir.js`).
-- Docker sets `DATA_DIR=/app/data`.
-- Usage data now in SQLite (`${DATA_DIR}/db/data.sqlite`) alongside main state. `src/lib/usageDb.js` is a shim re-exporting from `src/lib/db/repos/usageRepo.js`.
 
-## Webpack config quirks (next.config.mjs)
+- SQLite driver order (`src/lib/db/driver.js`): Bun `bun:sqlite` → `better-sqlite3` → Node `node:sqlite` (≥22.5) → `sql.js` (fallback).
+- `better-sqlite3` is **optionalDependency** — if native build fails, sql.js fallback at runtime.
+- Data directory: `DATA_DIR` env or `~/.9router` (Windows `%APPDATA%\9router`). Docker sets `DATA_DIR=/app/data`.
+
+## Webpack config quirks (`next.config.mjs`)
+
 - `serverExternalPackages`: `better-sqlite3`, `sql.js`, `node:sqlite`, `bun:sqlite`, `node-forge`, `ssh2`, `node-ssh`.
 - Server-side: deletes `crypto` alias from resolve to force native Node.js crypto.
 - Client-side fallbacks: `fs: false`, `path: false`, `crypto: false`.
-- Watcher ignores `logs`, `.next`, `gitbook`, `cli`.
-
-## Tunnel & env
-- Tunnel manager: `src/lib/tunnel/tunnelManager.js` + `src/lib/tunnel/cloudflared.js`; Tailscale auto-resumes from settings.
-- Public domain: `PUBLIC_DOMAIN` or `TUNNEL_PUBLIC_DOMAIN` (default `9router.com`).
-- Worker URL: `TUNNEL_WORKER_URL` (default `https://9router.com`).
-- Full env var list: `.env.build`.
-
-## CI / release
-- Docker: push to GHCR + Docker Hub on `v*` tag or manual dispatch (`.github/workflows/docker-publish.yml`); Node 22-alpine, multi-platform (amd64/arm64).
-- GitBook: deploy on changes under `gitbook/` (`.github/workflows/gitbook-pages.yml`); Node 24; pushes static export to external `9router/9router.github.io` repo.
-- Root npm-publish will fail (`"private": true`); CLI is published manually via `cli/ $ npm run publish:cli`.
-- Docker `output: "standalone"` bundles `.next/standalone`, `open-sse/`, `src/mitm/`, `src/shared/`, `src/lib/`, and native/wasm deps (`better-sqlite3`, `sql.js`, `node-forge`).
+- `output: "standalone"` for Docker builds.
 
 ## Key source layout
-- API routes: `src/app/api/v1/*` (compat), `src/app/api/*` (management), `src/app/api/oauth/*` (auth flows).
-- SSE core: `src/sse/handlers/chat.js` (entry) → `open-sse/handlers/chatCore.js` (orchestration) → `open-sse/executors/*` (provider calls).
-- Translator: `open-sse/translator/` (request/response format converters).
-- Persistence: `src/lib/localDb.js` (config/state), `src/lib/usageDb.js` (usage history/logs). Both are shims re-exporting from the SQLite DB layer at `src/lib/db/`.
-- Security: `src/proxy.js` + `src/dashboardGuard.js` (dashboard auth middleware).
-- Auth: `src/lib/auth/dashboardSession.js` (JWT), `src/lib/oauth/` (OAuth flows).
-- Dashboard pages: `src/app/dashboard/`, `src/app/login/`, `src/app/landing/`.
 
-## Git-ignored but present in working dir
-- `package-lock.json`, `node_modules/` — standard.
-- `docs/*` (except `docs/ARCHITECTURE.md`), `test/*`, `cloudflare/*` — intentionally gitignored.
-- `data/`, `logs/`, `.bin/` — runtime artifacts.
+| Area | Location |
+|------|----------|
+| API routes (LLM compat) | `src/app/api/v1/*` |
+| API routes (management) | `src/app/api/*` |
+| API routes (auth) | `src/app/api/oauth/*` |
+| SSE chat core | `src/sse/handlers/chat.js` → `open-sse/handlers/chatCore.js` → `open-sse/executors/*` |
+| Translator | `open-sse/translator/` |
+| Persistence | `src/lib/db/` (SQLite repos); `src/lib/localDb.js` / `src/lib/usageDb.js` are thin shims |
+| Auth | `src/lib/auth/dashboardSession.js` (JWT), `src/lib/oauth/` (OAuth flows) |
+| Dashboard pages | `src/app/dashboard/`, `src/app/login/`, `src/app/landing/` |
+
+## CLI package (`cli/`)
+
+- `postinstall` hook installs runtime deps (sql.js, better-sqlite3, systray2) into `~/.9router/runtime/node_modules` — avoids EBUSY on global updates.
+- Tray: uses `systray2` fork on macOS/Linux; Windows uses PowerShell `NotifyIcon`.
+- Commands must be run from `cli/` directory.
+- `engines.node >= 18`.
+
+## Docker build
+
+- Builder stage installs `python3 make g++ curl wget git` for native modules.
+- Runner stage copies only needed dirs: `open-sse/`, `src/mitm/`, `src/shared/`, `src/lib/`, plus native deps (`better-sqlite3`, `sql.js` wasm, `node-forge`).
+- Multi-platform (amd64/arm64). Pushed to GHCR + Docker Hub on `v*` tag.
+
+## CI
+
+- **docker-publish.yml**: on `v*` tag or manual dispatch. Buildx, cache from registry.
+- **gitbook-pages.yml**: on push to `main` changing `gitbook/**`. Node 24. Deploys static export to external `9router/9router.github.io` repo via deploy key.
+- **npm-publish.yml**: on release. Runs `npm test` (will fail — no test framework installed). CLI is published manually via `cli/` `npm run publish:cli`.
