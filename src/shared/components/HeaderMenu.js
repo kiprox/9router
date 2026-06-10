@@ -6,6 +6,7 @@ import { useTheme } from "@/shared/hooks/useTheme";
 import ChangelogModal from "./ChangelogModal";
 import NineRemotePromoModal from "./NineRemotePromoModal";
 import LanguageSwitcher from "./LanguageSwitcher";
+import { ConfirmModal } from "./Modal";
 
 const LOCALE_INFO = {
   "en": { name: "English", flag: "🇺🇸" },
@@ -55,6 +56,8 @@ export default function HeaderMenu({ onLogout }) {
 
   const [langOpen, setLangOpen] = useState(false);
   const [locale, setLocale] = useState("en");
+  const [shutdownOpen, setShutdownOpen] = useState(false);
+  const [isShuttingDown, setIsShuttingDown] = useState(false);
   const { toggleTheme, isDark } = useTheme();
   const menuRef = useRef(null);
 
