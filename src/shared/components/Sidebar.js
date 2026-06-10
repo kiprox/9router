@@ -315,19 +315,20 @@ export default function Sidebar({ onClose }) {
               ) : null;
             })}
 
-            {/* Remote */}
-            <button
-              onClick={() => setShowRemoteModal(true)}
-              className={cn(
-                "flex items-center gap-3 px-3 py-1 rounded-lg transition-all group w-full",
-                "text-text-muted hover:bg-surface-2 hover:text-text-main"
-              )}
-            >
-              <span className="material-symbols-outlined text-[18px] group-hover:text-primary transition-colors">
-                computer
-              </span>
-              <span className="text-[13px] font-medium">Remote</span>
-            </button>
+            {!isDockerImage && (
+              <button
+                onClick={() => setShowRemoteModal(true)}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-1 rounded-lg transition-all group w-full",
+                  "text-text-muted hover:bg-surface-2 hover:text-text-main"
+                )}
+              >
+                <span className="material-symbols-outlined text-[18px] group-hover:text-primary transition-colors">
+                  computer
+                </span>
+                <span className="text-[13px] font-medium">Remote</span>
+              </button>
+            )}
 
             {/* Settings */}
             <Link
