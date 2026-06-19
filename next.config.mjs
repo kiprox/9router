@@ -1,3 +1,5 @@
+const proxyClientMaxBodySize = process.env.NINEROUTER_PROXY_CLIENT_MAX_BODY_SIZE || "128mb";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
@@ -20,9 +22,7 @@ const nextConfig = {
   },
   env: {},
   experimental: {
-    // #1529/#1572: LLM clients can send long context or base64 image payloads through /v1 rewrites.
     proxyClientMaxBodySize,
-    // Cache fetch responses across HMR refreshes for faster dev reloads.
     serverComponentsHmrCache: true,
   },
   webpack: (config, { isServer }) => {
