@@ -22,4 +22,10 @@ export const FILTERS = {
     models
       .filter((m) => !m.id?.toLowerCase().includes("embed") && !m.id?.toLowerCase().includes("asr"))
       .map((m) => ({ id: m.id, name: m.name || m.id })),
+
+  // models.dev returns a large catalog; keep only mimo models
+  "mimo-free": (models) =>
+    (Array.isArray(models) ? models : [])
+      .filter((m) => m.id?.startsWith("mimo") || m.name?.toLowerCase().includes("mimo"))
+      .map((m) => ({ id: m.id, name: m.name || m.id })),
 };

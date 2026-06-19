@@ -37,7 +37,7 @@ RUN apk add --no-cache curl && mkdir -p /app/data /app/data-home
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/.next/standalone ./
-
+COPY --from=builder /app/custom-server.js ./custom-server.js
 COPY --from=builder /app/open-sse ./open-sse
 COPY --from=builder /app/src/mitm ./src/mitm
 COPY --from=builder /app/src/shared ./src/shared

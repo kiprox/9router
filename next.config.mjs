@@ -21,7 +21,9 @@ const nextConfig = {
   env: {},
   experimental: {
     // #1529/#1572: LLM clients can send long context or base64 image payloads through /v1 rewrites.
-    proxyClientMaxBodySize: "50mb",
+    proxyClientMaxBodySize,
+    // Cache fetch responses across HMR refreshes for faster dev reloads.
+    serverComponentsHmrCache: true,
   },
   webpack: (config, { isServer }) => {
     if (isServer) {
