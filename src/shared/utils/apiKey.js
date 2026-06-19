@@ -26,9 +26,10 @@ const API_KEY_SECRET = loadApiKeySecret();
  */
 function generateKeyId() {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = crypto.randomBytes(6);
   let result = "";
   for (let i = 0; i < 6; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+    result += chars[bytes[i] % chars.length];
   }
   return result;
 }
