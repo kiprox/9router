@@ -21,37 +21,38 @@ export async function OPTIONS() {
  */
 export async function GET(request) {
   try {
-    const settings = await getSettings();
-    if (settings.requireApiKey) {
-      const apiKey = extractApiKey(request);
-      if (!apiKey) {
-        return Response.json(
-          { error: { message: "Missing API key", type: "auth_error" } },
-          { status: 401, headers: { "Access-Control-Allow-Origin": "*" } }
-        );
-      }
-      const valid = await isValidApiKey(apiKey);
-      if (!valid) {
-        return Response.json(
-          { error: { message: "Invalid API key", type: "auth_error" } },
-          { status: 401, headers: { "Access-Control-Allow-Origin": "*" } }
-        );
-      }
-    }
-
-    // Collect all models from all providers
     const models = [];
+    const seen = new Set();
+
+    function addModel({ name, displayName, description, methods = ["generateContent"] }) {
+      if (seen.has(name)) return;
+      seen.add(name);
+      models.push({
+        name,
+        displayName,
+        description,
+        supportedGenerationMethods: methods,
+        inputTokenLimit: 128000,
+        outputTokenLimit: 8192,
+      });
+    }
     
     for (const [provider, providerModels] of Object.entries(PROVIDER_MODELS)) {
       for (const model of providerModels) {
-        models.push({
+        addModel({
           name: `models/${provider}/${model.id}`,
           displayName: model.name || model.id,
           description: `${provider} model: ${model.name || model.id}`,
-          supportedGenerationMethods: ["generateContent"],
-          inputTokenLimit: 128000,
-          outputTokenLimit: 8192,
         });
+
+        if (provider === "gemini") {
+          addModel({
+            name: `models/${model.id}`,
+            displayName: model.name || model.id,
+            description: `Gemini model: ${model.name || model.id}`,
+            methods: ["generateContent", "streamGenerateContent"],
+          });
+        }
       }
     }
 
@@ -61,4 +62,3 @@ export async function GET(request) {
     return Response.json({ error: { message: error.message } }, { status: 500 });
   }
 }
-
