@@ -4,12 +4,7 @@ import {
   QODER_USERINFO_URL,
 } from "../../qoder/constants.js";
 import crypto from "crypto";
-import open from "open";
-import { QODER_CONFIG } from "../constants/oauth.js";
-import { getServerCredentials } from "../config/index.js";
-import { startLocalServer } from "../utils/server.js";
-import { spinner as createSpinner } from "../utils/ui.js";
-import { safeErrorText } from "../utils/sanitizeError.js";
+import { v4 as uuidv4 } from "uuid";
 
 /**
  * Qoder OAuth Service
@@ -83,36 +78,25 @@ export class QoderService {
       nonce,
     });
 
-    return `${this.config.authorizeUrl}?${params.toString()}`;
+    return {
+      verificationUriComplete: `${QODER_LOGIN_URL}?${params.toString()}`,
+      codeVerifier: verifier,
+      nonce,
+      machineId,
+    };
   }
 
   /**
-   * Exchange authorization code for tokens
+   * Single poll attempt. Returns one of:
+   *   { status: "pending" }       — keep polling
+   *   { status: "ok", token, ... } — user authorized, tokens captured
+   *   throws Error                 — terminal failure
+   *
+   * Upstream returns 202/404 while waiting; 200 with a JSON body when done.
    */
-  async exchangeCode(code, redirectUri) {
-    const basicAuth = Buffer.from(
-      `${this.config.clientId}:${this.config.clientSecret}`
-    ).toString("base64");
-
-    const response = await fetch(this.config.tokenUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-        Authorization: `Basic ${basicAuth}`,
-      },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code: code,
-        redirect_uri: redirectUri,
-        client_id: this.config.clientId,
-        client_secret: this.config.clientSecret,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await safeErrorText(response);
-      throw new Error(`Token exchange failed: ${error}`);
+  async pollDeviceToken({ nonce, codeVerifier }) {
+    if (!nonce || !codeVerifier) {
+      throw new Error("pollDeviceToken: missing nonce or code verifier");
     }
     const url = `${QODER_DEVICE_TOKEN_URL}?nonce=${encodeURIComponent(nonce)}&verifier=${encodeURIComponent(codeVerifier)}&challenge_method=S256`;
 
@@ -122,40 +106,23 @@ export class QoderService {
         Accept: "application/json",
         "User-Agent": "Go-http-client/2.0",
       },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-        client_id: this.config.clientId,
-        client_secret: this.config.clientSecret,
-      }),
     });
 
-    if (!response.ok) {
-      const error = await safeErrorText(response);
-      throw new Error(`Token refresh failed: ${error}`);
+    // Pending — server has registered the device code but the user hasn't
+    // finished the browser flow yet. Both 202 and 404 mean "keep polling".
+    if (response.status === 202 || response.status === 404) {
+      return { status: "pending" };
     }
 
-    return await response.json();
-  }
-
-  /**
-   * Get user info from Qoder
-   */
-  async getUserInfo(accessToken) {
-    const response = await fetch(
-      `${this.config.userInfoUrl}?accessToken=${encodeURIComponent(accessToken)}`,
-      { headers: { Accept: "application/json" } }
-    );
+    const text = await response.text();
 
     if (!response.ok) {
-      const error = await safeErrorText(response);
-      throw new Error(`Failed to get user info: ${error}`);
-    }
-
-    const result = await response.json();
-
-    if (!result.success) {
-      throw new Error("Failed to get user info");
+      let message = `Qoder device token poll failed: HTTP ${response.status}`;
+      try {
+        const body = JSON.parse(text);
+        if (body.message) message = `Qoder device token poll failed: ${body.message}`;
+      } catch {}
+      throw new Error(message);
     }
 
     let body;
