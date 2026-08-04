@@ -5,6 +5,10 @@ const NPM_PACKAGE_NAME = "9router";
 const DOCKERHUB_REPO = "simata/9router";
 const DOCKERHUB_TAG = "stable";
 
+const VERSION_CACHE_TTL_MS = 3600000;
+
+const versionCache = (global.__npmVersionCache ??= { value: null, fetchedAt: 0 });
+
 function fetchJson(url) {
   return new Promise((resolve) => {
     const req = https.get(url, { timeout: 4000 }, (res) => {
@@ -48,13 +52,24 @@ function compareVersions(a, b) {
   return 0;
 }
 
+async function getLatestVersionCached() {
+  if (versionCache.value && Date.now() - versionCache.fetchedAt < VERSION_CACHE_TTL_MS) {
+    return versionCache.value;
+  }
+  const latest = await fetchLatestVersion();
+  if (latest) {
+    versionCache.value = latest;
+    versionCache.fetchedAt = Date.now();
+  }
+  return latest;
+}
+
 export async function GET() {
   const [latestVersion, dockerInfo, rawImageSha] = await Promise.all([
-    fetchLatestVersion(),
+    getLatestVersionCached(),
     fetchDockerTagInfo(DOCKERHUB_TAG),
     Promise.resolve(process.env.NEXT_PUBLIC_APP_IMAGE_SHA || process.env.SOURCE_COMMIT || null),
   ]);
-  
   const currentVersion = pkg.version;
   const imageSha = rawImageSha ? String(rawImageSha).slice(0, 7) : null;
   const isDockerImage = !!rawImageSha;

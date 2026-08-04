@@ -24,6 +24,8 @@ const nextConfig = {
   experimental: {
     proxyClientMaxBodySize,
     serverComponentsHmrCache: true,
+    // Tree-shake heavy barrel imports to cut compile + bundle size
+    optimizePackageImports: ["@xyflow/react", "@dnd-kit/core", "@dnd-kit/sortable", "material-symbols", "marked"],
   },
   webpack: (config, { isServer }) => {
     if (isServer) {
