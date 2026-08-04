@@ -6,6 +6,9 @@ FROM node:22-alpine AS builder
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Mark this as a Docker image — required for Next.js build-time detection of public env var
+ENV NEXT_PUBLIC_APP_IMAGE_SHA=docker
+
 WORKDIR /app
 
 # Gabung jadi satu RUN, kurangi layer & secret mounts
@@ -30,10 +33,6 @@ ENV PORT=20128
 ENV HOSTNAME=0.0.0.0
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATA_DIR=/app/data
-
-# Mark this as a Docker image so runtime feature flags (e.g. hiding the
-# Shutdown button / 9English link in the sidebar) activate automatically.
-ENV NEXT_PUBLIC_APP_IMAGE_SHA=docker
 
 # Health check cuma butuh curl, bukan git/wget
 RUN apk add --no-cache curl && mkdir -p /app/data /app/data-home
