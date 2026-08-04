@@ -2,6 +2,7 @@ import { getProviderConnections, validateApiKey, updateProviderConnection, getSe
 import { resolveConnectionProxyConfig, pickProxyPoolId } from "@/lib/network/connectionProxy";
 import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
 import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
+import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
 import { resolveProviderId, FREE_PROVIDERS } from "@/shared/constants/providers.js";
 import * as log from "../utils/logger.js";
 
@@ -40,7 +41,12 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       let pickedId = override.proxyPoolId || null;
       if (strategy !== "none") {
         const allPools = await getProxyPools({ isActive: true });
-        const poolIds = allPools.filter(p => p.proxyUrl).map(p => p.id);
+        let poolIds = allPools.filter(p => p.proxyUrl).map(p => p.id);
+        // Skip proxy pools already tried this request (FreeUsageLimitError rotation)
+        if (options?.excludeProxyPoolIds?.size) {
+          poolIds = poolIds.filter(id => !options.excludeProxyPoolIds.has(id));
+        }
+        if (poolIds.length === 0) return null; // all pools exhausted
         pickedId = pickProxyPoolId(poolIds, strategy, providerId);
       }
       const resolvedProxy = await resolveConnectionProxyConfig({ proxyPoolId: pickedId || "" });
@@ -208,7 +214,17 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
  * @returns {{ shouldFallback: boolean, cooldownMs: number }}
  */
 export async function markAccountUnavailable(connectionId, status, errorText, provider = null, model = null, resetsAtMs = null) {
-  if (!connectionId || connectionId === "noauth") return { shouldFallback: false, cooldownMs: 0 };
+  if (!connectionId || connectionId === "noauth") {
+    // OpenCode Free: on per-IP usage limit, rotate to the next proxy pool.
+    // `FreeUsageLimitError` is opencode-specific, so this stays scoped to opencode.
+    const isFreeUsageLimit = status === HTTP_STATUS.RATE_LIMITED && /FreeUsageLimitError|Rate limit exceeded/i.test(String(errorText));
+    if (isFreeUsageLimit && provider === "opencode") {
+      const settings = await getSettings();
+      const rotate = (settings.providerStrategies || {})[provider]?.rotateStrategy || "";
+      if (rotate !== "none") return { shouldFallback: true, cooldownMs: 0 };
+    }
+    return { shouldFallback: false, cooldownMs: 0 };
+  }
   const connections = await getProviderConnections({ provider });
   const conn = connections.find(c => c.id === connectionId);
   const backoffLevel = conn?.backoffLevel || 0;

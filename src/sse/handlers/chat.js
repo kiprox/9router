@@ -192,11 +192,12 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
 
   // Try with available accounts (fallback on errors)
   const excludeConnectionIds = new Set();
+  const excludeProxyPoolIds = new Set();
   let lastError = null;
   let lastStatus = null;
 
   while (true) {
-    const credentials = await getProviderCredentials(provider, excludeConnectionIds, model);
+    const credentials = await getProviderCredentials(provider, excludeConnectionIds, model, { excludeProxyPoolIds });
 
     // All accounts unavailable
     if (!credentials || credentials.allRateLimited) {
@@ -277,6 +278,9 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     if (shouldFallback) {
       log.warn("FALLBACK", `⇄ ACC:${credentials.connectionName} UNAVAILABLE (${result.status}) → NEXT ACCOUNT`);
       excludeConnectionIds.add(credentials.connectionId);
+      // Track which proxy pool was used so the next attempt picks another one
+      const poolId = credentials.providerSpecificData?.connectionProxyPoolId;
+      if (poolId) excludeProxyPoolIds.add(poolId);
       lastError = result.error;
       lastStatus = result.status;
       continue;
