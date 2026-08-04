@@ -31,6 +31,10 @@ ENV HOSTNAME=0.0.0.0
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATA_DIR=/app/data
 
+# Mark this as a Docker image so runtime feature flags (e.g. hiding the
+# Shutdown button / 9English link in the sidebar) activate automatically.
+ENV NEXT_PUBLIC_APP_IMAGE_SHA=docker
+
 # Health check cuma butuh curl, bukan git/wget
 RUN apk add --no-cache curl && mkdir -p /app/data /app/data-home
 
