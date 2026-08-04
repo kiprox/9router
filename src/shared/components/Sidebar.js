@@ -68,8 +68,6 @@ export default function Sidebar({ onClose }) {
       .then(res => res.json())
       .then(data => {
         if (data?.hasUpdate) setUpdateInfo(data);
-        setIsDockerImage(data?.isDockerImage ?? APP_CONFIG.isDockerImage);
-        setImageSha(data?.imageSha ?? APP_CONFIG.imageSha);
       })
       .catch(() => {});
   }, []);

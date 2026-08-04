@@ -32,6 +32,7 @@ ENV NODE_ENV=production
 ENV PORT=20128
 ENV HOSTNAME=0.0.0.0
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_PUBLIC_APP_IMAGE_SHA=docker
 ENV DATA_DIR=/app/data
 
 # Health check cuma butuh curl, bukan git/wget

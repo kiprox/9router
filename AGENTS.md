@@ -13,9 +13,9 @@
 
 ```bash
 # Root (Next.js app)
-npm run dev        # next dev --webpack --port 20128
+npm run dev        # next dev --webpack --port 20127
 npm run build      # next build --webpack
-npm run dev:bun    # bun --bun next dev --webpack --port 20128
+npm run dev:bun    # bun --bun next dev --webpack --port 20127
 npm run build:bun  # bun --bun next build --webpack
 npm run start:bun  # bun ./.next/standalone/server.js
 npx eslint .       # flat config: eslint.config.mjs (core-web-vitals preset)
@@ -46,7 +46,8 @@ No `server-init.js` exists. The entrypoint is the Next.js router itself. `initia
 
 ## Architecture & runtime gotchas
 
-- Port `20128` hard-coded in npm scripts and Dockerfile `PORT` env.
+- Dev port is `20127` (npm scripts); Docker `PORT` env is `20128`. `UPDATER_CONFIG.appPort` is `20128`.
+- **`NEXT_PUBLIC_*` env vars are build-time-only.** `NEXT_PUBLIC_APP_IMAGE_SHA` is set in the Dockerfile builder stage and inlined into client JS at build time. It is NOT available at runtime in the runner stage — server-side `process.env.NEXT_PUBLIC_APP_IMAGE_SHA` is `undefined` in Docker. Client-side `APP_CONFIG.isDockerImage` is the reliable source of truth; never derive `isDockerImage` from a server-side API response.
 - Rewrites (`next.config.mjs`): `/v1/*` & `/codex/*` → `/api/v1/*`; `/v1/v1/*` intentional duplicate for Codex CLI compat.
 - Auth middleware at `src/proxy.js` + `src/dashboardGuard.js` — file is NOT named `middleware.js` (unconventional, middleware won't run unless renamed). Implements API key, JWT, CLI token, local-only path checks.
 - MITM server (`src/mitm/server.js`) binds port 443; requires sudo/admin for DNS hosts-file edits. Copied from `node_modules` to `DATA_DIR/runtime/mitm/` at startup to avoid locking install dir.
