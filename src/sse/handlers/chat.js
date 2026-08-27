@@ -224,8 +224,16 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
   const excludeProxyPoolIds = new Set();
   let lastError = null;
   let lastStatus = null;
+  // Hard cap on fallback attempts so a globally-rate-limited provider (e.g. opencode
+  // free tier rejecting every proxy IP) cannot spin through all pools forever.
+  let attemptCount = 0;
+  const MAX_ACCOUNT_ATTEMPTS = 12;
 
   while (true) {
+    if (++attemptCount > MAX_ACCOUNT_ATTEMPTS) {
+      log.warn("CHAT", `[${provider}/${model}] exceeded max fallback attempts (${MAX_ACCOUNT_ATTEMPTS}), aborting`);
+      return errorResponse(lastStatus || HTTP_STATUS.SERVICE_UNAVAILABLE, lastError || "All accounts/proxies exhausted");
+    }
     const credentials = await getProviderCredentials(provider, excludeConnectionIds, model, { excludeProxyPoolIds });
 
     // All accounts unavailable
