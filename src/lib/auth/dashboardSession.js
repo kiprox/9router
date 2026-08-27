@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import fs from "node:fs";
 import path from "node:path";
 import { DATA_DIR } from "../dataDir.js";
+import { getSettings } from "@/lib/localDb";
 
 const JWT_SECRET_PATH = path.join(DATA_DIR, "jwt_secret");
 
