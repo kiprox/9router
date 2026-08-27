@@ -4,7 +4,7 @@ import { PROVIDERS } from "../config/providers.js";
 import { injectReasoningContent } from "../utils/reasoningContentInjector.js";
 import { resolveSessionId } from "../utils/sessionManager.js";
 
-const OPENCODE_UA = "opencode";
+const OPENCODE_UA = "opencode/1.18.23";
 const MESSAGES_MODELS = new Set();
 
 function generateRequestId() {
