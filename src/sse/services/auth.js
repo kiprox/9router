@@ -47,15 +47,32 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       const settings = await getSettings();
       const override = (settings.providerStrategies || {})[providerId] || {};
       const strategy = override.rotateStrategy || "none";
-      let pickedId = override.proxyPoolId || null;
+      const selectedPoolId = (override.proxyPoolId && override.proxyPoolId !== "__none__") ? override.proxyPoolId : null;
+      let pickedId = selectedPoolId;
       if (strategy !== "none") {
         const allPools = await getProxyPools({ isActive: true });
-        let poolIds = allPools.filter(p => p.proxyUrl).map(p => p.id);
+        // Only consider pools that actually carry a proxy URL
+        const usable = allPools.filter(p => p.proxyUrl);
+        // Prefer health-tested pools; fall back to all usable if none are tested-ok
+        const healthy = usable.filter(p => p.testStatus === "ok");
+        const candidatePools = healthy.length > 0 ? healthy : usable;
+        let poolIds = candidatePools.map(p => p.id);
+        // Always keep the user's explicitly selected pool in the rotation set
+        if (selectedPoolId && !poolIds.includes(selectedPoolId)) {
+          poolIds.unshift(selectedPoolId);
+        }
         // Skip proxy pools already tried this request (FreeUsageLimitError rotation)
         if (options?.excludeProxyPoolIds?.size) {
           poolIds = poolIds.filter(id => !options.excludeProxyPoolIds.has(id));
         }
-        if (poolIds.length === 0) return null; // all pools exhausted
+        if (poolIds.length === 0) {
+          // All candidates exhausted — fall back to the user's selected pool if it wasn't the one that failed
+          if (selectedPoolId && !options?.excludeProxyPoolIds?.has(selectedPoolId)) {
+            poolIds = [selectedPoolId];
+          } else {
+            return null; // all pools exhausted
+          }
+        }
         pickedId = pickProxyPoolId(poolIds, strategy, providerId);
       }
       const resolvedProxy = await resolveConnectionProxyConfig({ proxyPoolId: pickedId || "" });
