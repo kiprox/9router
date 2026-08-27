@@ -1,10 +1,6 @@
 import { ProxyAgent, fetch as undiciFetch } from "undici";
 
-// Test against the real destination the proxy is actually used for (opencode free
-// endpoint). A proxy that only reaches google.com can still be rejected/rate-limited
-// by opencode, so testing google gave false "passed" results. A 429 here means the
-// proxy's IP is already limited by opencode → the test must fail.
-const DEFAULT_TEST_URL = "https://opencode.ai/zen/v1/models";
+const DEFAULT_TEST_URL = "https://google.com/";
 const DEFAULT_TIMEOUT_MS = 8000;
 
 function getErrorMessage(err) {
@@ -61,31 +57,13 @@ export async function testProxyUrl({ proxyUrl, testUrl, timeoutMs } = {}) {
 
     try {
       const res = await undiciFetch(normalizedTestUrl, {
-        method: "GET",
+        method: "HEAD",
         dispatcher,
         signal: controller.signal,
         headers: {
           "User-Agent": "9Router",
         },
       });
-
-      if (!res.ok) {
-        let bodySnippet = "";
-        try {
-          const text = await res.text();
-          bodySnippet = text ? ` — ${text.slice(0, 200)}` : "";
-        } catch {
-          // ignore body read errors
-        }
-        return {
-          ok: false,
-          status: res.status,
-          statusText: res.statusText,
-          url: normalizedTestUrl,
-          elapsedMs: Date.now() - startedAt,
-          error: `Upstream returned ${res.status} ${res.statusText}${bodySnippet}`,
-        };
-      }
 
       return {
         ok: res.ok,
