@@ -1,6 +1,6 @@
 {
-  "name": "sirouter",
-  "version": "0.5.55",
+"name": "sirouter",
+  "version": "0.5.65",
   "description": "9Router web dashboard",
   "private": true,
   "scripts": {
