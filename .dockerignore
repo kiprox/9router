@@ -35,3 +35,18 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+
+# Not needed in the image (runner only uses public/.next/standalone/custom-server.js/open-sse/src/{mitm,shared,lib})
+gitbook/
+cli/
+cloudflare/
+tests/
+docs/
+skills/
+images/
+.github/
+*.old
+**/*.old
+open-sse.old/
+.next-cli-build/
+Dockerfile.dev
