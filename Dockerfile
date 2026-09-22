@@ -10,6 +10,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PUBLIC_APP_IMAGE_SHA=docker
 
 WORKDIR /app
+# CN mirror for apk (used by builder and runner stages)
+RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories
 
 # Gabung jadi satu RUN, kurangi layer & secret mounts
 RUN apk add --no-cache python3 make g++ curl wget git

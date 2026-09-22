@@ -7,6 +7,8 @@ import { DATA_DIR } from "../dataDir.js";
 import { getSettings } from "@/lib/localDb";
 
 const JWT_SECRET_PATH = path.join(DATA_DIR, "jwt_secret");
+const DEFAULT_PASSWORD = "123456";
+const SESSION_MAX_AGE_SEC = 24 * 60 * 60;
 
 function loadOrGenerateJwtSecret() {
   if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
@@ -69,6 +71,7 @@ export async function setDashboardAuthCookie(cookieStore, request, claims = {}) 
     secure: shouldUseSecureCookie(request),
     sameSite: "lax",
     path: "/",
+    maxAge: SESSION_MAX_AGE_SEC,
   });
 }
 
