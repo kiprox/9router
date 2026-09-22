@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { CardSkeleton } from "@/shared/components";
+import { APP_CONFIG } from "@/shared/constants/config";
 import { CLI_TOOLS, MITM_TOOLS } from "@/shared/constants/cliTools";
 import { MitmLinkCard } from "./components";
 import ToolSummaryCard from "./components/ToolSummaryCard";
@@ -40,7 +41,12 @@ export default function CLIToolsPageClient({ machineId }) {
     );
   }
 
-  const regularTools = Object.entries(CLI_TOOLS);
+  // In Docker mode the server-side Apply (writes to container homedir) and
+  // which-based status detection are both broken — show only guide-type tools
+  // (pure copy-paste) plus the MITM section.
+  const isDockerImage = APP_CONFIG.isDockerImage;
+  const regularTools = Object.entries(CLI_TOOLS)
+    .filter(([, tool]) => !isDockerImage || tool.configType === "guide");
   const mitmTools = Object.entries(MITM_TOOLS);
 
   return (
