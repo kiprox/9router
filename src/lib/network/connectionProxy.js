@@ -9,6 +9,33 @@ function normalizeString(value) {
 // ─── Proxy pool rotation state (in-memory) ─────────────────────────
 const rotateState = new Map(); // providerId → { index }
 
+// ─── Proxy pool rate-limit cooldown (in-memory) ────────────────────
+// Upstream free tiers rate-limit per egress IP (e.g. opencode FreeUsageLimitError:
+// `Rate limit exceeded. Please try again later.` with no reset timestamp).
+// markPoolRateLimited() parks that pool until cooldownMs elapses so later
+// requests skip it instead of burning the per-request rotation on a dead IP.
+// `ponytail:` fixed cooldown because upstream gives no reset time; parse
+// Retry-After / resets_at when a provider starts sending one.
+const poolCooldowns = new Map(); // poolId → cooldownUntilMs
+
+export const POOL_RATE_LIMIT_COOLDOWN_MS = 5 * 60 * 1000;
+
+export function markPoolRateLimited(poolId, cooldownMs = POOL_RATE_LIMIT_COOLDOWN_MS) {
+  if (!poolId) return;
+  poolCooldowns.set(poolId, Date.now() + cooldownMs);
+}
+
+export function isPoolCoolingDown(poolId) {
+  if (!poolId) return false;
+  const until = poolCooldowns.get(poolId);
+  if (!until) return false;
+  if (until <= Date.now()) {
+    poolCooldowns.delete(poolId);
+    return false;
+  }
+  return true;
+}
+
 /**
  * Pick one proxy pool ID from a list based on strategy.
  * round-robin: cycle sequentially (in-memory, resets on restart)

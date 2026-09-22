@@ -12,6 +12,7 @@ import { getSettings } from "@/lib/localDb";
 import { getModelInfo, getComboModels } from "../services/model.js";
 import { handleChatCore } from "open-sse/handlers/chatCore.js";
 import { DEFAULT_HEADROOM_URL } from "@/lib/headroom/detect";
+import { markPoolRateLimited } from "@/lib/network/connectionProxy";
 import { getTransform as getPxpipeTransform } from "@/lib/pxpipe/loader.js";
 import { appendPxpipeEvent } from "@/lib/pxpipe/events.js";
 import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
@@ -340,7 +341,15 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       excludeConnectionIds.add(credentials.connectionId);
       // Track which proxy pool was used so the next attempt picks another one
       const poolId = credentials.providerSpecificData?.connectionProxyPoolId;
-      if (poolId) excludeProxyPoolIds.add(poolId);
+      if (poolId) {
+        excludeProxyPoolIds.add(poolId);
+        // Park per-IP-limited pools across requests (opencode FreeUsageLimitError:
+        // same egress IP will 429 again until upstream resets, no reset time given)
+        if (provider === "opencode" && result.status === HTTP_STATUS.RATE_LIMITED
+          && /FreeUsageLimitError|Rate limit exceeded/i.test(String(result.error))) {
+          markPoolRateLimited(poolId);
+        }
+      }
       lastError = result.error;
       lastStatus = result.status;
       continue;

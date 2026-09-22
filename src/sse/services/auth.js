@@ -1,5 +1,5 @@
 import { getProviderConnections, validateApiKey, updateProviderConnection, getSettings, getProxyPools } from "@/lib/localDb";
-import { resolveConnectionProxyConfig, pickProxyPoolId } from "@/lib/network/connectionProxy";
+import { resolveConnectionProxyConfig, pickProxyPoolId, isPoolCoolingDown } from "@/lib/network/connectionProxy";
 import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
 import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
@@ -66,6 +66,8 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
         if (options?.excludeProxyPoolIds?.size) {
           poolIds = poolIds.filter(id => !options.excludeProxyPoolIds.has(id));
         }
+        // Skip pools parked by markPoolRateLimited (per-IP upstream limit, opencode free tier)
+        poolIds = poolIds.filter(id => !isPoolCoolingDown(id));
         if (poolIds.length === 0) {
           // All candidates exhausted — fall back to the user's selected pool if it wasn't the one that failed
           if (selectedPoolId && !options?.excludeProxyPoolIds?.has(selectedPoolId)) {
