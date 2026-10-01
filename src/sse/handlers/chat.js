@@ -12,7 +12,7 @@ import { getSettings } from "@/lib/localDb";
 import { getModelInfo, getComboModels } from "../services/model.js";
 import { handleChatCore } from "open-sse/handlers/chatCore.js";
 import { DEFAULT_HEADROOM_URL } from "@/lib/headroom/detect";
-import { markPoolRateLimited } from "@/lib/network/connectionProxy";
+import { markPoolRateLimited, clearPoolRateLimit, parseRetryAfterMs } from "@/lib/network/connectionProxy";
 import { getTransform as getPxpipeTransform } from "@/lib/pxpipe/loader.js";
 import { appendPxpipeEvent } from "@/lib/pxpipe/events.js";
 import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
@@ -252,7 +252,9 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     if (!credentials || credentials.allRateLimited) {
       if (credentials?.allRateLimited) {
         const errorMsg = lastError || credentials.lastError || "Unavailable";
-        const status = HTTP_STATUS.SERVICE_UNAVAILABLE;
+        // Pool-cooldown signal uses 429 (a real rate limit with retry-after);
+        // account-level exhaustion keeps the historical 503.
+        const status = credentials.status || HTTP_STATUS.SERVICE_UNAVAILABLE;
         log.warn("CHAT", `[${provider}/${model}] ${errorMsg} (${credentials.retryAfterHuman})`);
         return unavailableResponse(status, `[${provider}/${model}] ${errorMsg}`, credentials.retryAfter, credentials.retryAfterHuman, lastHeaders);
       }
@@ -321,6 +323,8 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
         await clearAccountError(credentials.connectionId, credentials, model);
         // "Consecutive" strikes: a success clears the breaker for this pair.
         clearAntigravityStrikes(credentials.connectionId, model);
+        // A healthy response proves this egress pool works again — reset its 429 escalation.
+        clearPoolRateLimit(credentials.providerSpecificData?.connectionProxyPoolId);
       }
     });
 
@@ -351,10 +355,15 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       if (poolId) {
         excludeProxyPoolIds.add(poolId);
         // Park per-IP-limited pools across requests (opencode FreeUsageLimitError:
-        // same egress IP will 429 again until upstream resets, no reset time given)
+        // same egress IP will 429 again until upstream resets the window)
         if (provider === "opencode" && result.status === HTTP_STATUS.RATE_LIMITED
           && /FreeUsageLimitError|Rate limit exceeded/i.test(String(result.error))) {
-          markPoolRateLimited(poolId);
+          // Honor upstream retry-after when sent; otherwise escalate the pool's
+          // cooldown (5m → 10m → ... → 6h cap) so a dead egress IP stops being
+          // re-probed every few minutes until opencode resets the window.
+          const retryAfterMs = parseRetryAfterMs(result.response?.headers?.get?.("retry-after"));
+          const parkedMs = markPoolRateLimited(poolId, retryAfterMs);
+          log.warn("FALLBACK", `⊘ POOL ${poolId} parked ${Math.round(parkedMs / 60000)}m after opencode 429${retryAfterMs ? " (per retry-after)" : ""}`);
         }
       }
       lastError = result.error;

@@ -1,5 +1,5 @@
 import { getProviderConnections, validateApiKey, updateProviderConnection, getSettings, getProxyPools } from "@/lib/localDb";
-import { resolveConnectionProxyConfig, pickProxyPoolId, isPoolCoolingDown } from "@/lib/network/connectionProxy";
+import { resolveConnectionProxyConfig, pickProxyPoolId, isPoolCoolingDown, getPoolCooldownUntil } from "@/lib/network/connectionProxy";
 import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
 import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
@@ -68,13 +68,28 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
           poolIds = poolIds.filter(id => !options.excludeProxyPoolIds.has(id));
         }
         // Skip pools parked by markPoolRateLimited (per-IP upstream limit, opencode free tier)
+        const coolingIds = poolIds.filter(id => isPoolCoolingDown(id));
         poolIds = poolIds.filter(id => !isPoolCoolingDown(id));
         if (poolIds.length === 0) {
-          // All candidates exhausted — fall back to the user's selected pool if it wasn't the one that failed
-          if (selectedPoolId && !options?.excludeProxyPoolIds?.has(selectedPoolId)) {
+          // All candidates exhausted — fall back to the user's selected pool,
+          // unless it is parked by cooldown: re-probing a dead egress IP now
+          // would just burn a request, so surface a 429 with retry-after instead.
+          if (selectedPoolId && !options?.excludeProxyPoolIds?.has(selectedPoolId) && !isPoolCoolingDown(selectedPoolId)) {
             poolIds = [selectedPoolId];
+          } else if (coolingIds.length > 0) {
+            const untils = coolingIds.map(id => getPoolCooldownUntil(id)).filter(Boolean);
+            const earliestUntil = untils.length ? Math.min(...untils) : Date.now();
+            log.warn("AUTH", `${provider} | all proxy pools cooling down (earliest release ${new Date(earliestUntil).toISOString()})`);
+            return {
+              allRateLimited: true,
+              status: HTTP_STATUS.RATE_LIMITED,
+              retryAfter: earliestUntil,
+              retryAfterHuman: formatRetryAfter(earliestUntil),
+              lastError: "All proxy pools are cooling down after upstream rate limit",
+              lastErrorCode: HTTP_STATUS.RATE_LIMITED
+            };
           } else {
-            return null; // all pools exhausted
+            return null; // all pools exhausted this request
           }
         }
         pickedId = pickProxyPoolId(poolIds, strategy, providerId);
