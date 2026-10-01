@@ -17,7 +17,7 @@ const inter = Inter({
 });
 
 export const metadata = {
-  title: "AI Manager",
+  title: "Simata - AI Manager",
   description: "One endpoint for all your AI providers. Manage keys, monitor usage, and scale effortlessly.",
   icons: {
     icon: "/favicon.svg",

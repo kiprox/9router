@@ -5,7 +5,7 @@ const RAW_IMAGE_SHA = process.env.NEXT_PUBLIC_APP_IMAGE_SHA || process.env.SOURC
 
 export const APP_CONFIG = {
   name: "Simata AI",
-  description: "AI Manager",
+  description: "One endpoint for all your AI providers. Manage keys, monitor usage, and scale effortlessly.",
   version: pkg.version,
   imageSha: RAW_IMAGE_SHA ? String(RAW_IMAGE_SHA).slice(0, 7) : null,
   isDockerImage: !!RAW_IMAGE_SHA,
