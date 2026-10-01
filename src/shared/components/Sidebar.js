@@ -22,7 +22,7 @@ const navItems = [
   { href: "/dashboard/endpoint", label: "Endpoint & Key", icon: "api" },
   { href: "/dashboard/providers", label: "Providers", icon: "dns" },
   // { href: "/dashboard/basic-chat", label: "Basic Chat", icon: "chat" }, // Hidden
-  { href: "/dashboard/combos", label: "Combo & Vision Adapter", icon: "layers" },
+  { href: "/dashboard/combos", label: "Combo Models", icon: "layers" },
   { href: "/dashboard/usage", label: "Usage", icon: "bar_chart" },
   { href: "/dashboard/quota", label: "Quota Tracker", icon: "data_usage" },
   { href: "/dashboard/token-saver", label: "Token Saver", icon: "savings" },
@@ -37,7 +37,7 @@ const debugItems = [
 
 const systemItems = [
   { href: "/dashboard/proxy-pools", label: "Proxy Pools", icon: "lan" },
-  { href: "/dashboard/skills", label: "Skills", icon: "extension" },
+  { href: "/dashboard/skills", label: "Skills", icon: "extension", hideInDocker: true },
 ];
 
 export default function Sidebar({ onClose }) {
@@ -263,7 +263,7 @@ export default function Sidebar({ onClose }) {
               </div>
             )}
 
-            {systemItems.map((item) => (
+            {systemItems.filter((item) => !(isDockerImage && item.hideInDocker)).map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -315,7 +315,8 @@ export default function Sidebar({ onClose }) {
               ) : null;
             })}
 
-{!isDockerImage && (
+{/* Remote */}
+            {!isDockerImage && (
               <button
                 onClick={() => setShowRemoteModal(true)}
                 className={cn(
