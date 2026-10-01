@@ -95,6 +95,8 @@ function getConnectionErrorTag(connection) {
 }
 
 const APIKEY_INITIAL_VISIBLE = 20;
+const STATUS_FILTER_STORAGE_KEY = "providers.statusFilter";
+const VALID_STATUS_FILTERS = new Set(STATUS_FILTER_OPTIONS.map((o) => o.value));
 
 export default function ProvidersPage() {
   const [connections, setConnections] = useState([]);
@@ -116,6 +118,19 @@ export default function ProvidersPage() {
     registerSearch("Search providers...");
     return () => unregisterSearch();
   }, [registerSearch, unregisterSearch]);
+
+  // Restore the status filter from localStorage on mount. Read in an effect
+  // (not the useState initializer) to avoid a hydration mismatch; changes are
+  // persisted by the select's onChange handler.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STATUS_FILTER_STORAGE_KEY);
+      if (VALID_STATUS_FILTERS.has(stored)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setStatusFilter(stored);
+      }
+    } catch {}
+  }, []);
 
   const matchSearch = (name) => {
     if (!searchQuery.trim()) return true;
@@ -389,7 +404,12 @@ export default function ProvidersPage() {
       <div className="flex items-center justify-end">
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            try {
+              localStorage.setItem(STATUS_FILTER_STORAGE_KEY, e.target.value);
+            } catch {}
+          }}
           className="h-8 rounded-lg border border-black/10 bg-black/[0.02] px-2 text-xs text-text-primary outline-none transition-colors hover:bg-black/5 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/10"
           aria-label="Filter providers by connection status"
         >

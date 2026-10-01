@@ -27,7 +27,7 @@ const navItems = [
   { href: "/dashboard/quota", label: "Quota Tracker", icon: "data_usage" },
   { href: "/dashboard/token-saver", label: "Token Saver", icon: "savings" },
   // { href: "/dashboard/pxpipe", label: "PXPIPE", icon: "image" },
-  { href: "/dashboard/cli-tools", label: "CLI Tools", icon: "terminal" },
+  { href: "/dashboard/cli-tools", label: "CLI Tools", icon: "terminal", hideInDocker: true },
 ];
 
 const debugItems = [
@@ -182,7 +182,7 @@ export default function Sidebar({ onClose }) {
 
         {/* Navigation */}
         <nav className="flex-1 px-4 py-2 space-y-0.5 overflow-y-auto custom-scrollbar">
-          {navItems.map((item) => (
+          {navItems.filter((item) => !(isDockerImage && item.hideInDocker)).map((item) => (
             <Link
               key={item.href}
               href={item.href}
