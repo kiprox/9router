@@ -6,6 +6,7 @@ import { checkFallbackError, formatRetryAfter } from "./accountFallback.js";
 import { unavailableResponse } from "../utils/error.js";
 import { getCapabilitiesForModel } from "../providers/capabilities.js";
 import { extractTextContent } from "../translator/formats/gemini.js";
+import { QUARANTINE_CONFIG } from "../config/comboConfig.js";
 
 // Hard capabilities = input modalities; missing one drops request data (e.g. image
 // stripped). Must be prioritized. Soft (e.g. search) only degrades a feature.
@@ -86,6 +87,105 @@ export function reorderByCapabilities(models, required) {
  * @type {Map<string, { index: number, consecutiveUseCount: number }>}
  */
 const comboRotationState = new Map();
+
+/**
+ * Combo-member quarantine: after a fallback-worthy failure the model is skipped
+ * in this combo until its cooldown expires (half-open probe on expiry); a
+ * success clears it. Consecutive failures escalate the cooldown exponentially.
+ * @type {Map<string, { level: number, until: number }>} key: `${comboName}::${model}`
+ */
+const comboModelHealth = new Map();
+
+function quarantineKey(comboName, model) {
+  return `${comboName || "__default__"}::${model}`;
+}
+
+function activeQuarantine(entry, now = Date.now()) {
+  return entry && entry.until > now ? entry : null;
+}
+
+/**
+ * Record a combo-member failure and (re)start its quarantine cooldown.
+ * Duration = max(exponential base per consecutive level, classification cooldown),
+ * capped at QUARANTINE_CONFIG.maxCooldownMs.
+ */
+function recordComboFailure(comboName, model, cooldownMs = 0) {
+  const key = quarantineKey(comboName, model);
+  const prev = comboModelHealth.get(key);
+  const level = Math.min((prev?.level || 0) + 1, QUARANTINE_CONFIG.maxLevel);
+  const escalated = Math.min(
+    QUARANTINE_CONFIG.baseCooldownMs * 2 ** (level - 1),
+    QUARANTINE_CONFIG.maxCooldownMs
+  );
+  const duration = Math.min(
+    Math.max(escalated, Number(cooldownMs) || 0),
+    QUARANTINE_CONFIG.maxCooldownMs
+  );
+  comboModelHealth.set(key, { level, until: Date.now() + duration });
+  return duration;
+}
+
+function clearComboFailure(comboName, model) {
+  comboModelHealth.delete(quarantineKey(comboName, model));
+}
+
+/**
+ * Clear quarantine state (combo edited/deleted or quarantine disabled)
+ * @param {string} [comboName] - Combo to clear; omit to clear all
+ */
+export function resetComboQuarantine(comboName) {
+  if (!comboName) {
+    comboModelHealth.clear();
+    return;
+  }
+  const prefix = `${comboName}::`;
+  for (const key of comboModelHealth.keys()) {
+    if (key.startsWith(prefix)) comboModelHealth.delete(key);
+  }
+}
+
+/**
+ * Active quarantine entries for the dashboard badge
+ * @returns {Object<string, Object<string, string>>} { [comboName]: { [model]: untilISO } }
+ */
+export function getComboQuarantineState() {
+  const now = Date.now();
+  const out = {};
+  for (const [key, entry] of comboModelHealth) {
+    if (entry.until <= now) continue;
+    const sep = key.indexOf("::");
+    const comboName = key.slice(0, sep);
+    const model = key.slice(sep + 2);
+    (out[comboName] ||= {})[model] = new Date(entry.until).toISOString();
+  }
+  return out;
+}
+
+/**
+ * Drop cooling models from the try-list; when every member is cooling keep the
+ * one closest to expiry so the combo still probes instead of failing outright.
+ * @returns {string[]} models in order, minus quarantined members
+ */
+function filterQuarantined(models, comboName, log) {
+  const now = Date.now();
+  const eligible = [];
+  const cooling = [];
+  for (const m of models) {
+    const entry = activeQuarantine(comboModelHealth.get(quarantineKey(comboName, m)), now);
+    (entry ? cooling : eligible).push({ m, entry });
+  }
+  if (cooling.length === 0) return models;
+
+  if (eligible.length === 0) {
+    cooling.sort((a, b) => a.entry.until - b.entry.until);
+    log.info("COMBO", `all models quarantined, probing earliest: ${cooling[0].m}`);
+    return [cooling[0].m];
+  }
+  for (const c of cooling) {
+    log.info("COMBO", `Skipping quarantined model ${c.m} (${Math.ceil((c.entry.until - now) / 1000)}s left)`);
+  }
+  return eligible.map((e) => e.m);
+}
 
 // Trailing run of items after the last assistant/model turn = the current user
 // turn. It may span several messages (e.g. text + image split across blocks),
@@ -275,9 +375,10 @@ export function getComboModelsFromData(modelStr, combosData) {
  * @param {string} [options.comboName] - Name of the combo (for round-robin tracking)
  * @param {string} [options.comboStrategy] - Strategy: "fallback" or "round-robin"
  * @param {number|string} [options.comboStickyLimit=1] - Requests per combo model before switching
+ * @param {boolean} [options.quarantine=true] - Skip combo members cooling down after failures
  * @returns {Promise<Response>}
  */
-export async function handleComboChat({ body, models, handleSingleModel, log, comboName, comboStrategy, comboStickyLimit = 1, autoSwitch = true }) {
+export async function handleComboChat({ body, models, handleSingleModel, log, comboName, comboStrategy, comboStickyLimit = 1, autoSwitch = true, quarantine = true }) {
   // Apply rotation strategy if enabled
   let rotatedModels = getRotatedModels(models, comboName, comboStrategy, comboStickyLimit);
 
@@ -292,7 +393,12 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
       rotatedModels = reordered;
     }
   }
-  
+
+  // Quarantine: don't burn a round on a member that just failed in this combo.
+  if (quarantine) {
+    rotatedModels = filterQuarantined(rotatedModels, comboName, log);
+  }
+
   let lastError = null;
   let earliestRetryAfter = null;
   let lastStatus = null;
@@ -306,6 +412,7 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
       
       // Success (2xx) - return response
       if (result.ok) {
+        if (quarantine) clearComboFailure(comboName, modelStr);
         log.info("COMBO", `Model ${modelStr} succeeded`);
         return result;
       }
@@ -339,6 +446,12 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
         return result;
       }
 
+      // Quarantine the member for the next requests (probe again when it expires)
+      if (quarantine) {
+        const quarantinedMs = recordComboFailure(comboName, modelStr, cooldownMs);
+        log.warn("COMBO", `Model ${modelStr} quarantined for ${Math.ceil(quarantinedMs / 1000)}s`);
+      }
+
       // For transient errors (503/502/504), wait for cooldown before falling through
       // so a briefly-overloaded provider gets a chance to recover rather than being
       // skipped immediately (fixes: combo falls through on transient 503)
@@ -356,7 +469,12 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
       // Catch unexpected exceptions to ensure fallback continues
       lastError = error.message || String(error);
       if (!lastStatus) lastStatus = 500;
-      log.warn("COMBO", `Model ${modelStr} threw error, trying next`, { error: lastError });
+      if (quarantine) {
+        const quarantinedMs = recordComboFailure(comboName, modelStr, 0);
+        log.warn("COMBO", `Model ${modelStr} threw error, quarantined ${Math.ceil(quarantinedMs / 1000)}s, trying next`, { error: lastError });
+      } else {
+        log.warn("COMBO", `Model ${modelStr} threw error, trying next`, { error: lastError });
+      }
     }
   }
 

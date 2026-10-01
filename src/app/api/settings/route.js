@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSettings, updateSettings } from "@/lib/localDb";
 import { applyOutboundProxyEnv } from "@/lib/network/outboundProxy";
-import { resetComboRotation } from "open-sse/services/combo.js";
+import { resetComboRotation, resetComboQuarantine } from "open-sse/services/combo.js";
 import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
@@ -94,6 +94,11 @@ export async function PATCH(request) {
       Object.prototype.hasOwnProperty.call(body, "comboStrategies")
     ) {
       resetComboRotation();
+    }
+
+    // Disabling quarantine must drop its state (re-enabling starts clean too)
+    if (Object.prototype.hasOwnProperty.call(body, "comboQuarantineEnabled")) {
+      resetComboQuarantine();
     }
 
     if (

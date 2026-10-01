@@ -60,6 +60,8 @@ export default function CombosPage() {
   const [activeProviders, setActiveProviders] = useState([]);
   const [comboStrategies, setComboStrategies] = useState({});
   const [capacityAdapter, setCapacityAdapter] = useState(EMPTY_CAPACITY_ADAPTER);
+  const [quarantineEnabled, setQuarantineEnabled] = useState(true);
+  const [quarantine, setQuarantine] = useState({});
   const { getCaps } = useModelCaps();
   const [confirmState, setConfirmState] = useState(null);
   const [presetLoading, setPresetLoading] = useState(null); // "cursor" | "claude" | null
@@ -76,6 +78,20 @@ export default function CombosPage() {
     const alive = new Set(combos.map((c) => c.id));
     setSelectedIds((prev) => prev.filter((id) => alive.has(id)));
   }, [combos]);
+
+  // Keep quarantine badges fresh (cooldowns tick down server-side).
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const res = await fetch("/api/combos");
+        const data = await res.json();
+        if (res.ok) setQuarantine(data.quarantine || {});
+      } catch {
+        // Poll failure is harmless; next tick retries.
+      }
+    }, 30000);
+    return () => clearInterval(id);
+  }, []);
 
   const selectedCombos = combos.filter((c) => selectedIds.includes(c.id));
   const allSelected = combos.length > 0 && selectedIds.length === combos.length;
@@ -166,10 +182,12 @@ export default function CombosPage() {
 
       // Only LLM combos here - webSearch/webFetch combos belong to media-providers/web
       if (combosRes.ok) setCombos((combosData.combos || []).filter(c => !c.kind || c.kind === "llm"));
+      if (combosRes.ok) setQuarantine(combosData.quarantine || {});
       if (providersRes.ok) {
         setActiveProviders(providersData.connections || []);
       }
       setComboStrategies(settingsData.comboStrategies || {});
+      setQuarantineEnabled(settingsData.comboQuarantineEnabled !== false);
       const rawAdapter = settingsData.capacityAdapter || {};
       const normalized = {};
       for (const cap of CAPACITY_ADAPTER_CAPS) {
@@ -193,6 +211,20 @@ export default function CombosPage() {
       });
     } catch (error) {
       console.log("Error updating capacity adapter:", error);
+    }
+  };
+
+  const handleSetQuarantine = async (enabled) => {
+    setQuarantineEnabled(enabled);
+    if (!enabled) setQuarantine({});
+    try {
+      await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comboQuarantineEnabled: enabled }),
+      });
+    } catch (error) {
+      console.log("Error updating quarantine setting:", error);
     }
   };
 
@@ -500,6 +532,7 @@ export default function CombosPage() {
                   onDelete={() => handleDelete(combo.id)}
                   strategy={comboStrategies[combo.name] || {}}
                   onSetStrategy={(patch) => handleSetComboStrategy(combo.name, patch)}
+                  quarantine={quarantineEnabled ? (quarantine[combo.name] || {}) : {}}
                   selected={selectedIds.includes(combo.id)}
                   onToggleSelect={() => toggleSelect(combo.id)}
                 />
@@ -508,6 +541,16 @@ export default function CombosPage() {
           </div>
         </div>
       )}
+
+      {/* Quarantine (auto-skip failing combo members) */}
+      <Card padding="sm">
+        <Toggle
+          checked={quarantineEnabled}
+          onChange={handleSetQuarantine}
+          label="Auto-skip failing models"
+          description="A combo member that errors is skipped (cooldown, escalating on repeat) until it answers again — applies to Fallback and Round Robin."
+        />
+      </Card>
 
       {/* Capacity Adapter */}
       <CapacityAdapterSection
@@ -563,7 +606,14 @@ const fmtK = (n) => {
   return `${Math.round(n / 1000)}k`;
 };
 
-function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], copied, onCopy, onEdit, onDelete, strategy = {}, onSetStrategy, selected = false, onToggleSelect }) {
+const fmtCooldown = (until) => {
+  const s = Math.max(0, Math.ceil((new Date(until).getTime() - Date.now()) / 1000));
+  if (s >= 3600) return `${Math.ceil(s / 3600)}h`;
+  if (s >= 60) return `${Math.ceil(s / 60)}m`;
+  return `${s}s`;
+};
+
+function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], copied, onCopy, onEdit, onDelete, strategy = {}, onSetStrategy, quarantine = {}, selected = false, onToggleSelect }) {
   const [showJudgeSelect, setShowJudgeSelect] = useState(false);
   const current = strategy.fallbackStrategy || "fallback";
   const judge = strategy.judgeModel || "";
@@ -611,6 +661,22 @@ function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], cop
                 <span className="text-[10px] text-text-muted">+{combo.models.length - 3} more</span>
               )}
             </div>
+            {/* Quarantined members (failing → skipped until cooldown expires) */}
+            {Object.keys(quarantine).length > 0 && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                <span className="material-symbols-outlined text-[13px] text-red-500" title="Cooling down after failures">timer</span>
+                {Object.entries(quarantine).map(([m, until]) => (
+                  <code
+                    key={m}
+                    className="inline-flex items-center gap-1 rounded bg-red-500/10 px-1.5 py-0.5 font-mono text-[10px] text-red-500"
+                    title="Skipped after failures; re-probed when the cooldown expires"
+                  >
+                    <span className="truncate max-w-[160px]">{m}</span>
+                    <span>· {fmtCooldown(until)}</span>
+                  </code>
+                ))}
+              </div>
+            )}
             {comboCaps && (
               <div className="mt-1 flex items-center gap-2 text-[10px] text-text-muted">
                 <span>ctx {fmtK(comboCaps.contextWindow)}</span>

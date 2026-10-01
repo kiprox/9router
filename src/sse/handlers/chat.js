@@ -136,7 +136,8 @@ export async function handleChat(request, clientRawRequest = null) {
       log,
       comboName: modelStr,
       comboStrategy,
-      comboStickyLimit
+      comboStickyLimit,
+      quarantine: settings.comboQuarantineEnabled !== false
     });
   }
 
@@ -155,7 +156,8 @@ export async function handleChat(request, clientRawRequest = null) {
       ),
       log,
       comboName: modelStr,
-      comboStrategy: getActiveAdapterStrategy(requiredCapabilities, settings)
+      comboStrategy: getActiveAdapterStrategy(requiredCapabilities, settings),
+      quarantine: settings.comboQuarantineEnabled !== false
     });
   }
 
@@ -213,7 +215,8 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
         log,
         comboName: modelStr,
         comboStrategy,
-        comboStickyLimit
+        comboStickyLimit,
+        quarantine: chatSettings.comboQuarantineEnabled !== false
       });
     }
     log.warn("CHAT", "Invalid model format", { model: modelStr });

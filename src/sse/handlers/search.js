@@ -83,7 +83,8 @@ export async function handleSearch(request) {
       log,
       comboName: providerInput,
       comboStrategy,
-      comboStickyLimit
+      comboStickyLimit,
+      quarantine: settings.comboQuarantineEnabled !== false
     });
   }
 
