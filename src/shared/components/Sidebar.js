@@ -315,7 +315,7 @@ export default function Sidebar({ onClose }) {
               ) : null;
             })}
 
-{/* Remote */}
+            {/* Remote */}
             {!isDockerImage && (
               <button
                 onClick={() => setShowRemoteModal(true)}
