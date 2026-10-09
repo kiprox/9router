@@ -7,7 +7,18 @@
 - `cli/` (`9router` on npm): separate package, esbuild via `scripts/build-cli.js`. Prefer root wrappers `npm run cli:pack` / `cli:publish`.
 - `gitbook/`: separate docs site, static export to `out/`, Node 24.
 - `cloudflare/worker/`: KV worker, Wrangler, deploys separately.
-- `tests/unit/` + `tests/translator/`: bare `*.test.js` files — no `package.json`, no vitest/jest config, no root `npm test` script. CI `npm-publish.yml` still runs `npm test` and fails; ignore it, don't wire a runner unasked.
+- `tests/unit/` + `tests/translator/`: bare `*.test.js` files — no `package.json`, no vitest/jest config, no root `npm test` script. CI `npm-publish.yml` still runs `npm test` and fails; ignore it, don't wire a runner unasked. `main` only keeps a subset; the full suite lives on `master`.
+
+## Branches: `main` is intentionally trimmed (Docker-first)
+
+- `master`: full upstream-shaped tree — docs (`README*`, `CHANGELOG.md`, `DOCKER.md`, `i18n/README.*`), full `tests/`, `skills/`, every `public/i18n/literals/*.json`. Docs live here, not on `main`.
+- `main`: what we build and ship — **Docker image** (`docker-publish.yml`) is the deliverable; local `npm run build` is dev/preview only, not a publish path. Code stays synced with `upstream/master` (decolua/9router); only the tree around it is smaller.
+- Deliberately deleted on `main` — do NOT restore when merging upstream or reviewing diffs:
+  - docs/`README*`, `CHANGELOG.md`, `DOCKER.md`, `.env.example`, `i18n/README.*`, `images/`, `captain-definition`, `start.sh` → covered by `master` / `gitbook/`.
+  - `tests/**` vitest suite, `tests/vitest.config.js`, `tests/package.json`, baselines → no runner wired on `main` (see above).
+  - `public/i18n/literals/*` except `id.json` → i18n is `en` + `id` only; `en` needs no file (`src/i18n/runtime.js` returns source text), `id` is `public/i18n/literals/id.json`.
+  - `skills/*`, `src/shared/components/DonateModal.js`, `.vscode/`.
+- Upstream merge rule: keep `M` in `src/`, `open-sse/`, `cli/`, `gitbook/` (feature code); keep `D` for the paths above.
 
 ## Commands (repo root unless noted)
 
