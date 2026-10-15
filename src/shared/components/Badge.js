@@ -9,9 +9,11 @@ const variants = {
   warning: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
   error: "bg-red-500/10 text-red-600 dark:text-red-400",
   info: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  purple: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
 };
 
 const sizes = {
+  xs: "px-1.5 py-0.5 text-[10px]",
   sm: "px-2 py-0.5 text-[10px]",
   md: "px-2.5 py-1 text-xs",
   lg: "px-3 py-1.5 text-sm",
@@ -24,9 +26,11 @@ export default function Badge({
   dot = false,
   icon,
   className,
+  ...props
 }) {
   return (
     <span
+      {...props}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full font-semibold",
         variants[variant],
@@ -43,6 +47,7 @@ export default function Badge({
             variant === "error" && "bg-red-500",
             variant === "info" && "bg-blue-500",
             variant === "primary" && "bg-brand-500",
+            variant === "purple" && "bg-purple-500",
             variant === "default" && "bg-gray-500"
           )}
         />

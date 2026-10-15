@@ -190,7 +190,7 @@ export default function XiaomiMimoAuthModal({ isOpen, onSuccess, onClose }) {
 
   // The server-login card, shown in both the found and not-found states
   const renderServerLogin = () => (
-    <div className="bg-card p-3 rounded-lg border border-border flex flex-col gap-2">
+    <div className="bg-surface p-3 rounded-lg border border-border flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <span className="material-symbols-outlined text-primary text-base">login</span>
@@ -309,7 +309,7 @@ export default function XiaomiMimoAuthModal({ isOpen, onSuccess, onClose }) {
                 <div className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center text-xs text-text-muted">
-                <span className="bg-card px-2">or</span>
+                <span className="bg-surface px-2">or</span>
               </div>
             </div>
 
@@ -354,7 +354,7 @@ export default function XiaomiMimoAuthModal({ isOpen, onSuccess, onClose }) {
                 <button
                   type="button"
                   onClick={() => setShowClusterModal(false)}
-                  className="text-text-muted hover:text-text-primary p-1 rounded-md transition-colors cursor-pointer"
+                  className="text-text-muted hover:text-text-main p-1 rounded-md transition-colors cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-lg">close</span>
                 </button>

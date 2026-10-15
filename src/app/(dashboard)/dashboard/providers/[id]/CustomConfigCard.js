@@ -117,7 +117,7 @@ export default function CustomConfigCard({ providerId }) {
                     onChange={(e) => setRow(i, "name", e.target.value)}
                     placeholder="Header-Name"
                     spellCheck={false}
-                    className="w-44 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
+                    className="w-44 rounded-md border border-border bg-surface-2 px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
                   />
                   <input
                     value={row.value}
@@ -125,7 +125,7 @@ export default function CustomConfigCard({ providerId }) {
                     placeholder="Value"
                     spellCheck={false}
                     title={overridden ? "Overridden" : row.name.trim() in builtin ? "Registry default" : ""}
-                    className={`min-w-0 flex-1 rounded-md border bg-background px-2 py-1.5 text-sm focus:border-primary focus:outline-none ${
+                    className={`min-w-0 flex-1 rounded-md border bg-surface-2 px-2 py-1.5 text-sm focus:border-primary focus:outline-none ${
                       overridden ? "border-amber-400/60" : "border-border"
                     }`}
                   />

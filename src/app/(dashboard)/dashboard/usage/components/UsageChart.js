@@ -64,14 +64,14 @@ export default function UsageChart({ period = "7d" }) {
   return (
     <Card className="flex min-w-0 flex-col gap-3 p-3 sm:p-4">
       <div
-        className="grid w-full items-center gap-1 rounded-lg border border-border bg-bg-subtle p-1 sm:w-auto sm:self-start"
+        className="grid w-full items-center gap-1 rounded-lg border border-border bg-surface-2 p-1 sm:w-auto sm:self-start"
         style={{ gridTemplateColumns: `repeat(${VIEW_MODES.length}, minmax(0, 1fr))` }}
       >
         {VIEW_MODES.map((m) => (
           <button
             key={m.value}
             onClick={() => setViewMode(m.value)}
-            className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${viewMode === m.value ? "bg-primary text-white shadow-sm" : "text-text-muted hover:text-text hover:bg-bg-hover"}`}
+            className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${viewMode === m.value ? "bg-primary text-white shadow-sm" : "text-text-muted hover:text-text hover:bg-surface-2"}`}
           >
             {m.label}
           </button>

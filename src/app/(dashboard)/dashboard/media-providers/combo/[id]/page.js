@@ -3,9 +3,10 @@
 import { useParams, notFound, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, Button, Input, Toggle, ModelSelectModal } from "@/shared/components";
+import { Card, Button, Input, Toggle, ModelSelectModal, ConfirmModal } from "@/shared/components";
 import ProviderIcon from "@/shared/components/ProviderIcon";
 import { AI_PROVIDERS, MEDIA_PROVIDER_KINDS } from "@/shared/constants/providers";
+import { useNotificationStore } from "@/store/notificationStore";
 
 // Parse "providerId/model" or just "providerId" → { providerId, model }
 function parseModelEntry(entry) {
@@ -61,6 +62,8 @@ export default function ComboDetailPage() {
   const [apiKey, setApiKey] = useState("");
   const [connections, setConnections] = useState([]);
   const [modelAliases, setModelAliases] = useState({});
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const notify = useNotificationStore();
 
   const fetchAll = async () => {
     try {
@@ -107,7 +110,7 @@ export default function ComboDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
-    if (!res.ok) { const err = await res.json(); alert(err.error || "Failed to save"); return false; }
+    if (!res.ok) { const err = await res.json(); notify.error(err.error || "Failed to save"); return false; }
     return true;
   };
 
@@ -163,8 +166,12 @@ export default function ComboDetailPage() {
     });
   };
 
-  const handleDelete = async () => {
-    if (!confirm(`Delete combo "${combo.name}"?`)) return;
+  const handleDelete = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    setShowDeleteConfirm(false);
     const res = await fetch(`/api/combos/${id}`, { method: "DELETE" });
     if (res.ok) router.push(getListingHref(combo.kind));
   };
@@ -407,6 +414,16 @@ export default function ComboDetailPage() {
           closeOnSelect={false}
         />
       )}
+
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleConfirmDelete}
+        title="Delete"
+        message={`Delete combo "${combo.name}"?`}
+        confirmText="Delete"
+        cancelText="Cancel"
+      />
     </div>
   );
 }

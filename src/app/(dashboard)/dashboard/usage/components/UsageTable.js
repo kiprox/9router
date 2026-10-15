@@ -156,17 +156,17 @@ export default function UsageTable({
 
   return (
     <Card className="overflow-hidden">
-      <div className="p-4 border-b border-border bg-bg-subtle/50">
+      <div className="p-4 border-b border-border bg-surface-2/50">
         <h3 className="font-semibold">{title}</h3>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left">
-          <thead className="bg-bg-subtle/30 text-text-muted uppercase text-xs">
+          <thead className="bg-surface-2/30 text-text-muted uppercase text-xs">
             <tr>
               {columns.map((col) => (
                 <th
                   key={col.field}
-                  className={`px-6 py-3 hover:bg-bg-subtle/50 clickable-header ${col.align === "right" ? "text-right" : ""}`}
+                  className={`px-6 py-3 hover:bg-surface-2/50 clickable-header ${col.align === "right" ? "text-right" : ""}`}
                   onClick={() => onToggleSort(tableType, col.field)}
                   style={{ cursor: "pointer" }}
                 >
@@ -177,7 +177,7 @@ export default function UsageTable({
               {valueColumns.map((col) => (
                 <th
                   key={col.field}
-                  className="px-6 py-3 text-right hover:bg-bg-subtle/50 clickable-header"
+                  className="px-6 py-3 text-right hover:bg-surface-2/50 clickable-header"
                   onClick={() => onToggleSort(tableType, col.field)}
                   style={{ cursor: "pointer" }}
                 >
@@ -192,7 +192,7 @@ export default function UsageTable({
               <Fragment key={group.groupKey}>
                 {/* Group summary row */}
                 <tr
-                  className="group-summary hover:bg-bg-subtle/50 transition-colors clickable-row"
+                  className="group-summary hover:bg-surface-2/50 transition-colors clickable-row"
                   onClick={() => toggleGroup(group.groupKey)}
                   style={{ cursor: "pointer" }}
                 >
@@ -213,7 +213,7 @@ export default function UsageTable({
                 {expanded.has(group.groupKey) && group.items.map((item) => (
                   <tr
                     key={`detail-${item.key}`}
-                    className="group-detail hover:bg-bg-subtle/20 transition-colors"
+                    className="group-detail hover:bg-surface-2/20 transition-colors"
                   >
                     {renderDetailCells(item)}
                     <ValueCells item={item} viewMode={viewMode} />
