@@ -44,6 +44,7 @@ export {
 export {
   getModelAliases, setModelAlias, deleteModelAlias,
   getCustomModels, addCustomModel, deleteCustomModel,
+  deleteCustomModelsByProvider, deleteModelAliasesByPrefix,
   getMitmAlias, setMitmAliasAll,
 } from "./repos/aliasRepo.js";
 
@@ -55,6 +56,7 @@ export {
 // Disabled models
 export {
   getDisabledModels, getDisabledByProvider, disableModels, enableModels,
+  deleteDisabledByProvider,
 } from "./repos/disabledModelsRepo.js";
 
 // Usage

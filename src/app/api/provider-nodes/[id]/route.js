@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { deleteProviderConnectionsByProvider, deleteProviderNode, getProviderConnections, getProviderNodeById, updateProviderConnection, updateProviderNode } from "@/models";
+import { deleteProviderConnectionsByProvider, deleteProviderNode, getProviderConnections, getProviderNodeById, updateProviderConnection, updateProviderNode, deleteCustomModelsByProvider, deleteModelAliasesByPrefix } from "@/models";
+import { deleteDisabledByProvider } from "@/lib/disabledModelsDb";
 
 // PUT /api/provider-nodes/[id] - Update provider node
 export async function PUT(request, { params }) {
@@ -92,6 +93,9 @@ export async function DELETE(request, { params }) {
 
     await deleteProviderConnectionsByProvider(id);
     await deleteProviderNode(id);
+    await deleteCustomModelsByProvider(id);
+    await deleteModelAliasesByPrefix(id);
+    await deleteDisabledByProvider(id);
 
     return NextResponse.json({ success: true });
   } catch (error) {

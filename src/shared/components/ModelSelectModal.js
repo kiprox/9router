@@ -221,12 +221,16 @@ export default function ModelSelectModal({
     // self-hosted endpoints (Ollama, internal relays, etc.) don't always need a stored
     // key, so gating on connections hides models the user already added. These nodes
     // are LLM-only, so only surface them when no kind filter is active.
+    // Intersect with providerNodes so custom models orphaned by a node deletion
+    // (pre-cascade) cannot resurrect a deleted provider in the picker.
     // See #4177, #2113, #2119, #1988.
+    const liveNodeIds = new Set(providerNodes.map((node) => node.id));
     const compatibleNodeIds = kindFilter
       ? []
       : customModels
           .map((m) => m.providerAlias)
-          .filter((alias) => isOpenAICompatibleProvider(alias) || isAnthropicCompatibleProvider(alias));
+          .filter((alias) => isOpenAICompatibleProvider(alias) || isAnthropicCompatibleProvider(alias))
+          .filter((alias) => liveNodeIds.has(alias));
 
     // Only show connected providers (including both standard and custom)
     const providerIdsToShow = new Set([
