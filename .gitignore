@@ -106,3 +106,6 @@ graphify-out/*
 .start-dev.ps1
 start-dev-silent.cjs
 debug.log
+
+# Global excludes (~/.gitignore_global) has *opencode* — keep new opencode sources tracked.
+!open-sse/services/opencodeLocal.js
