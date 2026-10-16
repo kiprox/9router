@@ -1,4 +1,5 @@
 import { DefaultExecutor } from "./default.js";
+import { buildCodeBuddyHeaders } from "./codebuddyHeaders.js";
 
 /**
  * CodeBuddyIntlExecutor — talks to https://www.codebuddy.ai/v2/chat/completions
@@ -38,6 +39,16 @@ export class CodeBuddyIntlExecutor extends DefaultExecutor {
     }
 
     return transformed;
+  }
+
+  buildHeaders(credentials, stream = true, url, model, body = null) {
+    const headers = super.buildHeaders(credentials, stream, url, model, body);
+    // Same 11128 channel-verification enforcement as CN (see codebuddy-cn.js).
+    Object.assign(
+      headers,
+      buildCodeBuddyHeaders({ domain: "www.codebuddy.ai", credentials, body })
+    );
+    return headers;
   }
   parseError(response, bodyText) {
     if (bodyText) {

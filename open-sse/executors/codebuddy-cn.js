@@ -1,4 +1,5 @@
 import { DefaultExecutor } from "./default.js";
+import { buildCodeBuddyHeaders } from "./codebuddyHeaders.js";
 
 /**
  * CodeBuddyExecutor — talks to https://copilot.tencent.com/v2/chat/completions
@@ -63,6 +64,18 @@ export class CodeBuddyExecutor extends DefaultExecutor {
     // + reasoning_summary on plain requests makes CodeBuddy trip its content
     // filter and return an error (#2071).
     return transformed;
+  }
+
+  buildHeaders(credentials, stream = true, url, model, body = null) {
+    const headers = super.buildHeaders(credentials, stream, url, model, body);
+    // Gateway now enforces code 11128 "conversation id missing" + channel
+    // verification ("not sent from an official client"). Mirror the CLI's
+    // conversation family + identity headers (see codebuddyHeaders.js).
+    Object.assign(
+      headers,
+      buildCodeBuddyHeaders({ domain: "copilot.tencent.com", credentials, body })
+    );
+    return headers;
   }
   parseError(response, bodyText) {
     if (bodyText) {
