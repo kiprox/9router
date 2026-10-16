@@ -44,59 +44,9 @@ function envUrl(name, def) {
   return raw || def;
 }
 
-function envStr(name, def) {
-  const raw = process.env[name]?.trim();
-  return raw || def;
-}
-
-// on | off | auto — anything else falls back to the default.
-function envMode(name, def) {
-  const raw = process.env[name]?.trim().toLowerCase();
-  return raw === "on" || raw === "off" || raw === "auto" ? raw : def;
-}
-
 // SearXNG endpoint used by the unauthenticated web-search provider.
 // Configure this for a separate Docker service or remote SearXNG instance.
 export const SEARXNG_URL = envUrl("SEARXNG_URL", "http://localhost:8888/search");
-
-// OpenCode free-tier delegation: spawn the official `opencode serve` (v2 API)
-// locally and route free-model requests through it. The upstream gate
-// (FreeTierError 403) rejects every non-OpenCode client at the TLS/stack
-// level, so the only working free-tier path is the official binary itself.
-//   mode: on   — always delegate; infrastructure failures surface as errors
-//   mode: auto — delegate when the local service is usable, else direct path
-//   mode: off  — direct upstream path only (legacy behavior)
-// Env: OPENCODE_DELEGATE (on|off|auto, default auto; Docker image sets on),
-//      CLI_OPENCODE_BIN (default "opencode").
-export const OPENCODE_DELEGATE_CONFIG = {
-  mode: envMode("OPENCODE_DELEGATE", "auto"),
-  bin: envStr("CLI_OPENCODE_BIN", "opencode"),
-  startTimeoutMs: envMs("OPENCODE_DELEGATE_START_TIMEOUT_MS", 45 * 1000),
-  idleKillMs: envMs("OPENCODE_DELEGATE_IDLE_KILL_MS", 10 * 60 * 1000),
-  runTimeoutMs: envMs("OPENCODE_DELEGATE_RUN_TIMEOUT_MS", 15 * 60 * 1000),
-  pollIntervalMs: envMs("OPENCODE_DELEGATE_POLL_MS", 400),
-  modelCacheTtlMs: envMs("OPENCODE_DELEGATE_MODEL_TTL_MS", 10 * 60 * 1000),
-  maxConversations: envMs("OPENCODE_DELEGATE_MAX_CONVERSATIONS", 500),
-  maxReplayTurns: envMs("OPENCODE_DELEGATE_MAX_REPLAY_TURNS", 40),
-  // Session-level deny rules (last-match-wins over the base allow policy).
-  // deny-all strips every tool from the provider request and the free-tier
-  // gate then answers 403 FreeTierError (it fingerprints the tool list), so
-  // only side-effecting actions are denied — read/glob/grep stay listed and
-  // the gate stays green. Denied tools are removed from the model's tool
-  // list up front, so no permission pump is needed either. Proof (POC
-  // v2.0.29): deny-all → 403; these denies → 200 + outcome succeeded.
-  denyActions: [
-    "shell",
-    "edit",
-    "webfetch",
-    "websearch",
-    "subagent",
-    "execute",
-    "question",
-    "skill",
-    "external_directory",
-  ],
-};
 
 // Inter-chunk stall timeout (once tokens are flowing). Generous headroom so
 // slow reasoning models aren't aborted mid-stream. Env: STREAM_STALL_TIMEOUT_MS.

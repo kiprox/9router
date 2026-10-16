@@ -44,26 +44,6 @@ RUN apk add --no-cache curl su-exec && mkdir -p /app/data /app/data-home && \
   printf '#!/bin/sh\nchown -R node:node /app/data /app/data-home 2>/dev/null\nexec su-exec node "$@"\n' > /entrypoint.sh && \
   chmod +x /entrypoint.sh
 
-# Official OpenCode CLI (standalone musl build) — the only client the free-tier
-# gate accepts (TLS/h2-stack fingerprint). `opencode serve` (v2 API) is spawned
-# on demand by open-sse/services/opencodeLocal.js for free-model delegation.
-# TARGETARCH is a BuildKit auto-platform arg — declare it or it stays empty.
-ARG TARGETARCH
-ARG OPENCODE_VERSION=2.0.29
-RUN set -eux; \
-  case "${TARGETARCH:-amd64}" in \
-    amd64) oc_arch="x64" ;; \
-    arm64) oc_arch="arm64" ;; \
-    *) echo "unsupported TARGETARCH: ${TARGETARCH:-amd64}" >&2; exit 1 ;; \
-  esac; \
-  curl -fsSL "https://opencode.ai/files/bin/${OPENCODE_VERSION}/opencode-linux-${oc_arch}-musl.tar.gz" \
-    | tar -xz -C /usr/local/bin opencode; \
-  chmod 0755 /usr/local/bin/opencode; \
-  opencode --version
-
-# Route free-model requests through the bundled local `opencode serve`.
-ENV OPENCODE_DELEGATE=on
-
 COPY --chown=node:node --from=builder /app/public ./public
 COPY --chown=node:node --from=builder /app/.next/static ./.next/static
 COPY --chown=node:node --from=builder /app/.next/standalone ./

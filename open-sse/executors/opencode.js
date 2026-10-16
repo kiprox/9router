@@ -2,7 +2,6 @@ import crypto from "crypto";
 import { BaseExecutor } from "./base.js";
 import { PROVIDERS } from "../config/providers.js";
 import { MEMORY_CONFIG } from "../config/runtimeConfig.js";
-import { delegateMode, executeDelegated, DelegateError } from "../services/opencodeLocal.js";
 import { getThinkingLevels } from "../providers/thinkingLevels.js";
 import { injectReasoningContent } from "../utils/reasoningContentInjector.js";
 import { resolveSessionId } from "../utils/sessionManager.js";
@@ -450,32 +449,7 @@ export class OpenCodeExecutor extends BaseExecutor {
   }
 
   async execute(args) {
-    const credentials = this.prepareRequestCredentials(args);
-    const prepared = { ...args, credentials };
-    const mode = delegateMode();
-    if (mode !== "off") {
-      try {
-        const delegated = await executeDelegated({
-          model: args.model,
-          body: args.body,
-          credentials,
-          signal: args.signal,
-          log: args.log,
-          requestId: credentials[REQ_FIELD],
-          sessionKey: credentials[SESSION_FIELD],
-        });
-        if (delegated) return delegated;
-      } catch (err) {
-        const fallbackable = err instanceof DelegateError && err.delegateFallback;
-        if (mode === "on" || !fallbackable) throw err;
-        // auto mode: local service unusable → legacy direct path (403-prone).
-        args.log?.warn?.(
-          "DELEGATE",
-          `opencode serve unavailable (${err?.message || err}) → direct path`
-        );
-      }
-    }
-    return super.execute(prepared);
+    return super.execute({ ...args, credentials: this.prepareRequestCredentials(args) });
   }
 
   buildUrl(model) {
