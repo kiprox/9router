@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useNotificationStore } from "@/store/notificationStore";
 import Sidebar from "../Sidebar";
 import Header from "../Header";
+import CommandPalette from "../CommandPalette";
 
 function getToastStyle(type) {
   if (type === "success") {
@@ -117,6 +118,8 @@ export default function DashboardLayout({ children }) {
           <div className={`${pathname === "/dashboard/basic-chat" ? "flex-1 w-full h-full flex flex-col" : "max-w-7xl mx-auto"}`}>{children}</div>
         </div>
       </main>
+
+      <CommandPalette />
     </div>
   );
 }

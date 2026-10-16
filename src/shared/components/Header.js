@@ -9,6 +9,7 @@ import HeaderMenu from "@/shared/components/HeaderMenu";
 import HeaderLanguage from "@/shared/components/HeaderLanguage";
 import ThemeToggle from "@/shared/components/ThemeToggle";
 import { useHeaderSearchStore } from "@/store/headerSearchStore";
+import { useCommandPaletteStore } from "@/store/commandPaletteStore";
 import { OAUTH_PROVIDERS, APIKEY_PROVIDERS } from "@/shared/constants/config";
 import { MEDIA_PROVIDER_KINDS, AI_PROVIDERS } from "@/shared/constants/providers";
 import { getProviderIconSrc } from "@/shared/utils/providerIcon";
@@ -315,6 +316,7 @@ export default function Header({ onMenuClick, showMenuButton = true }) {
             </span>
           </div>
         )}
+        <CommandPaletteTrigger />
         <HeaderSearch />
         <ThemeToggle />
         <HeaderLanguage />
@@ -355,6 +357,26 @@ function HeaderSearch() {
         </button>
       )}
     </div>
+  );
+}
+
+function CommandPaletteTrigger() {
+  const setOpen = useCommandPaletteStore((s) => s.setOpen);
+
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      aria-label="Open command palette"
+      title="Search (Ctrl/⌘ K)"
+      className="flex items-center justify-center gap-2 size-10 md:h-9 md:w-auto md:size-auto md:pl-2.5 md:pr-1.5 rounded-full md:rounded-lg text-text-muted hover:text-text-main hover:bg-surface-2 md:hover:bg-surface-2 border border-transparent md:border-border md:bg-surface/60 md:hover:border-primary/40 transition-colors"
+    >
+      <span className="material-symbols-outlined text-[20px]">search</span>
+      <span className="hidden md:inline text-xs font-medium">Search</span>
+      <kbd className="hidden md:inline-flex items-center rounded border border-border bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium">
+        ⌘K
+      </kbd>
+    </button>
   );
 }
 
