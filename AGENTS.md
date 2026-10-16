@@ -4,20 +4,21 @@
 
 - Root (`sirouter`, private): Next.js 16 + React 19 gateway + dashboard. Plain JS ESM, no TS. Aliases `@/*`→`src/*`, `open-sse/*` (`jsconfig.json`).
 - `open-sse/`: provider routing/translation engine, no own `package.json`. Read `open-sse/AGENTS.md` before editing it; full request lifecycle in `docs/ARCHITECTURE.md`.
-- `cli/` (`9router` on npm): separate package, esbuild via `scripts/build-cli.js`. Prefer root wrappers `npm run cli:pack` / `cli:publish`.
+- `cli/` (`9router` on npm): separate package, esbuild via `cli/scripts/build-cli.js`. Prefer root wrappers `npm run cli:pack` / `cli:publish`.
 - `gitbook/`: separate docs site, static export to `out/`, Node 24.
 - `cloudflare/worker/`: KV worker, Wrangler, deploys separately.
-- `tests/unit/` + `tests/translator/`: bare `*.test.js` files — no `package.json`, no vitest/jest config, no root `npm test` script. CI `npm-publish.yml` still runs `npm test` and fails; ignore it, don't wire a runner unasked. `main` only keeps a subset; the full suite lives on `master`.
+- `tests/unit/` + `tests/translator/`: bare `*.test.js` files — no `package.json`, no vitest/jest config, no root `npm test` script. CI `npm-publish.yml` still runs `npm test` and fails; ignore it, don't wire a runner unasked. `main` only keeps a subset; the full suite lives on `origin/master` / `upstream/master`.
 
 ## Branches: `main` is intentionally trimmed (Docker-first)
 
-- `master`: full upstream-shaped tree — docs (`README*`, `CHANGELOG.md`, `DOCKER.md`, `i18n/README.*`), full `tests/`, `skills/`, every `public/i18n/literals/*.json`. Docs live here, not on `main`.
+- `master` (`origin/master`, the remote default): full upstream-shaped tree — docs (`README*`, `CHANGELOG.md`, `DOCKER.md`, `i18n/README.*`), full `tests/`, `skills/`, every `public/i18n/literals/*.json`. Docs live here, not on `main`.
 - `main`: what we build and ship — **Docker image** (`docker-publish.yml`) is the deliverable; local `npm run build` is dev/preview only, not a publish path. Code stays synced with `upstream/master` (decolua/9router); only the tree around it is smaller.
 - Deliberately deleted on `main` — do NOT restore when merging upstream or reviewing diffs:
-  - docs/`README*`, `CHANGELOG.md`, `DOCKER.md`, `.env.example`, `i18n/README.*`, `images/`, `captain-definition`, `start.sh` → covered by `master` / `gitbook/`.
-  - `tests/**` vitest suite, `tests/vitest.config.js`, `tests/package.json`, baselines → no runner wired on `main` (see above).
+  - docs/`README*`, `CHANGELOG.md`, `DOCKER.md`, `.env.example`, `captain-definition`, `start.sh` → covered by `master` / `gitbook/`.
+  - `tests/**` vitest config/suite (`tests/vitest.config.js`, `tests/package.json`, baselines) → no runner wired on `main` (see above); bare `*.test.js` files stay.
   - `public/i18n/literals/*` except `id.json` → i18n is `en` + `id` only; `en` needs no file (`src/i18n/runtime.js` returns source text), `id` is `public/i18n/literals/id.json`.
-  - `skills/*`, `src/shared/components/DonateModal.js`, `.vscode/`.
+  - `src/shared/components/DonateModal.js`, `.vscode/`.
+  - Trimmed-but-kept fork files, so don't bulk-restore the rest: `i18n/README.{id-ID,ru}.md`, `images/fusion-combo-ui.png`, `skills/9router-video/SKILL.md`.
 - Upstream merge rule: keep `M` in `src/`, `open-sse/`, `cli/`, `gitbook/` (feature code); keep `D` for the paths above.
 
 ## Commands (repo root unless noted)
@@ -46,7 +47,7 @@ src/app/layout.js (side-effect imports)
 ## Gotchas
 
 - Next 16 convention: auth is `src/proxy.js` (default `proxy`) + `src/dashboardGuard.js`. Do NOT rename to `middleware.js`.
-- Rewrites (`next.config.mjs`): `/v1/*`→`/api/v1/*`, `/v1/v1/*` dup (Codex compat), `/codex/*`→`/api/v1/responses`, `/responses`→`/api/v1/responses`, `/v1beta/*` passthrough.
+- Rewrites (`next.config.mjs`): `/v1/*`→`/api/v1/*`, `/v1/v1/*` dup (Codex compat), `/codex/*`→`/api/v1/responses`, `/responses`→`/api/v1/responses`, `/systemone`→`/api/v1/systemone`, `/v1beta/*` passthrough.
 - `NEXT_PUBLIC_*` is build-time-only. Client truth for image builds is `APP_CONFIG.isDockerImage/imageSha` (`NEXT_PUBLIC_APP_IMAGE_SHA` or `SOURCE_COMMIT` fallback).
 - `custom-server.js` derives client IP from the TCP socket → `x-9r-real-ip` + `x-9r-peer-token`, strips `XFF`/`x-real-ip` unless loopback proxy (also downgrades h2c upgrades). IP/rate-limit code must read `x-9r-real-ip`, never trust `XFF`.
 - MITM (`src/mitm/`): port 443 (8443 on Windows), needs sudo/admin for hosts-file DNS. Only the `node_modules`-bundled `server.js` is copied to `DATA_DIR/runtime/mitm/` (published CLI case); dev runs from source.
@@ -55,5 +56,5 @@ src/app/layout.js (side-effect imports)
 - `DATA_DIR` env else `~/.9router` (`%APPDATA%\9router` on Windows; Unix-style paths ignored on Windows). Docker sets `DATA_DIR=/app/data`.
 - Layout: compat APIs `src/app/api/v1/*`, management `src/app/api/*`, OAuth `src/app/api/oauth/*`; chat `src/sse/handlers/chat.js` → `open-sse/handlers/chatCore.js` → `executors/*`; dashboard `src/app/(dashboard)/dashboard/`; zustand stores `src/store/`.
 - CLI `postinstall` lazy-installs sql.js/better-sqlite3/systray2 into `~/.9router/runtime/node_modules` (avoids EBUSY/AV false positives). Tray: systray2 fork on macOS/Linux, PowerShell `NotifyIcon` on Windows. Engines: node ≥18.
-- Docker runner copies only `public`, `.next/static`+`standalone`, `custom-server.js`, `open-sse`, `src/{mitm,shared,lib}`, plus `node_modules/{better-sqlite3,node-forge,next,sql.js,node-machine-id}`; CMD `node server.js`. Multi-arch push on `v*` tag.
-- CI: `docker-publish.yml` (`v*`/dispatch); `gitbook-pages.yml` (push to main/master touching `gitbook/**`, force-orphan to `9router/9router.github.io`); `npm-publish.yml` (release; broken `npm test` — ignore, publish CLI manually).
+- Docker runner copies only `public`, `.next/static`+`standalone`, `custom-server.js`, `open-sse`, `src/{mitm,shared,lib}`, plus `node_modules/{better-sqlite3,node-forge,next,sql.js,node-machine-id}`; `/entrypoint.sh` (chown + `su-exec node`) runs `CMD node custom-server.js`. Multi-arch push on `v*` tag.
+- CI: `docker-publish.yml` (`v*`/dispatch; pushes GHCR + Docker Hub `simata/9router`, `linux/amd64,linux/arm64`); `gitbook-pages.yml` (push to main/master touching `gitbook/**`, force-orphan to `9router/9router.github.io`); `tray-binaries.yml` (manual; macOS arm64 tray, sha pinned in `cli/hooks/trayRuntime.js`); `npm-publish.yml` (release; broken `npm test` — ignore, publish CLI manually).
