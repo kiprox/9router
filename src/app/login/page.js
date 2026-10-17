@@ -3,6 +3,12 @@
 import { useState, useEffect } from "react";
 import { Card, Button, Input } from "@/shared/components";
 
+// Same rationale as the dashboard layout: a prerendered login page ships
+// build-specific chunk names with `cache-control: s-maxage=31536000`, so any
+// CDN/proxy cache serves a stale shell after an upgrade and its chunk requests
+// 404. Render it per-request instead.
+export const dynamic = "force-dynamic";
+
 export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
