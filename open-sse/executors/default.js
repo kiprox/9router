@@ -4,7 +4,7 @@ import { PROVIDERS, PROVIDER_OAUTH } from "../config/providers.js";
 import { ANTHROPIC_API_VERSION, OPENAI_COMPAT_BASE, ANTHROPIC_COMPAT_BASE, selectAnthropicBeta, mergeAnthropicBeta } from "../providers/shared.js";
 import { resolveOpenAICompatibleApiType } from "../services/provider.js";
 import { OAUTH_ENDPOINTS, buildKimiHeaders, NOUS_ATTRIBUTION } from "../config/appConstants.js";
-import { buildClineHeaders } from "../shared/clineAuth.js";
+import { buildClineFingerprintHeaders, getClineAccessToken } from "../shared/clineAuth.js";
 import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import { injectReasoningContent } from "../utils/reasoningContentInjector.js";
 import { stripUnsupportedParams } from "../translator/concerns/paramSupport.js";
@@ -24,17 +24,29 @@ function setAuth(headers, spec, token) {
   headers[spec.header] = spec.scheme === "bearer" ? `Bearer ${token}` : token;
 }
 
-// Resolve auth onto headers from a descriptor.
-function applyAuth(headers, desc, credentials) {
+// Token normalizers — providers whose upstream expects a different token shape
+// than the stored credential. Cline/ClinePass OAuth access tokens must be sent
+// as `workos:<jwt>`, while ClinePass API keys (`clp_…`) must go verbatim; see
+// shared/clineAuth.js. Applied here (not in a header hook) because hooks run
+// BEFORE applyAuth and would be overwritten by the raw token.
+const TOKEN_NORMALIZERS = {
+  cline: getClineAccessToken,
+  clinepass: getClineAccessToken,
+};
+
+// Resolve auth onto headers from a descriptor. `normalize` maps the stored
+// credential to the token shape upstream expects (see TOKEN_NORMALIZERS).
+function applyAuth(headers, desc, credentials, normalize) {
+  const token = (value) => (normalize && value ? normalize(value) : value);
   if (desc.combined) {
     // combined providers always set the header (legacy behavior, incl. noAuth → "Bearer undefined")
-    setAuth(headers, desc, credentials.apiKey || credentials.accessToken);
+    setAuth(headers, desc, token(credentials.apiKey || credentials.accessToken));
     if (desc.anthropicVersion && !headers["anthropic-version"]) headers["anthropic-version"] = ANTHROPIC_API_VERSION;
     return;
   }
   // split apiKey/oauth: set only the matching branch (legacy: anthropic-compatible skips when both absent)
-  if (credentials.apiKey) setAuth(headers, desc.apiKey, credentials.apiKey);
-  else if (credentials.accessToken) setAuth(headers, desc.oauth, credentials.accessToken);
+  if (credentials.apiKey) setAuth(headers, desc.apiKey, token(credentials.apiKey));
+  else if (credentials.accessToken) setAuth(headers, desc.oauth, token(credentials.accessToken));
   if (desc.anthropicVersion && !headers["anthropic-version"]) headers["anthropic-version"] = ANTHROPIC_API_VERSION;
 }
 
@@ -53,7 +65,10 @@ const HEADER_HOOKS = {
   // Muse: x-api-version only on subscription (minted key) requests — plain
   // Model API keys already work without it
   museHeaders: (h, c) => { if (c?.accessToken && !c?.apiKey) h["x-api-version"] = "1.0.0"; },
-  clineHeaders: (h, c) => Object.assign(h, buildClineHeaders(c.apiKey || c.accessToken)),
+  // Cline/ClinePass: static client fingerprint only. The Authorization value is
+  // set by applyAuth (which applies the `workos:` prefix for OAuth tokens), so
+  // this hook must never touch it.
+  clineHeaders: (h) => Object.assign(h, buildClineFingerprintHeaders()),
   kilocodeOrg: (h, c) => { if (c.providerSpecificData?.orgId) h["X-Kilocode-OrganizationID"] = c.providerSpecificData.orgId; },
 };
 
@@ -188,7 +203,7 @@ export class DefaultExecutor extends BaseExecutor {
     const desc = rt?.auth || AUTH_DESCRIPTORS[this.provider] || this.resolveAuthDescriptor();
     // Hooks run BEFORE auth so dynamic overlays can't clobber the token.
     for (const hook of desc.hooks || []) HEADER_HOOKS[hook]?.(headers, credentials);
-    applyAuth(headers, desc, credentials);
+    applyAuth(headers, desc, credentials, TOKEN_NORMALIZERS[this.provider]);
 
     // anthropic-compatible-* nodes serving a real Claude model sit in front of
     // Anthropic itself (a rotating multi-account proxy, a corporate gateway),

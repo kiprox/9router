@@ -101,6 +101,10 @@ const OAUTH_TEST_CONFIG = {
     authPrefix: "Bearer ",
   },
   cline: { refreshable: true },
+  // ClinePass shares Cline's WorkOS endpoints, so it uses the same probe. Without
+  // an entry here the dashboard Test button fell through to the API-key switch and
+  // answered "Provider test not supported" for both auth modes (#4732).
+  clinepass: { refreshable: true },
   gitlab: {
     // Test by hitting the GitLab user API — requires api or read_user scope
     url: "https://gitlab.com/api/v4/user",
@@ -328,7 +332,7 @@ async function refreshOAuthToken(connection) {
       return { accessToken: data.accessToken, expiresIn: data.expiresIn || 3600, refreshToken: data.refreshToken || refreshToken };
     }
 
-    if (provider === "cline") {
+    if (provider === "cline" || provider === "clinepass") {
       const response = await fetch(CLINE_CONFIG.refreshUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -411,7 +415,7 @@ async function testOAuthConnection(connection, effectiveProxy = null) {
     return { valid: false, error: initial.error, refreshed };
   }
 
-  if (connection.provider === "cline") {
+  if (connection.provider === "cline" || connection.provider === "clinepass") {
     const tryProbe = async (token) => {
       const res = await probeClineAccessToken(token);
       if (res.ok) return { valid: true, error: null, refreshed, newTokens };
@@ -907,6 +911,17 @@ case "llm7": {
           },
         }, effectiveProxy);
         return { valid: res.ok, error: res.ok ? null : "Invalid API key", refreshed: false };
+      }
+      case "cline":
+      case "clinepass": {
+        // API-key mode. `/models` is public (200 even with a bogus key), so the
+        // probe must hit an authenticated endpoint: /users/me answers 401 with the
+        // "re-authenticate" message for a bad key and costs no inference quota.
+        const res = await fetchWithConnectionProxy("https://api.cline.bot/api/v1/users/me", {
+          method: "GET",
+          headers: buildClineHeaders(connection.apiKey, { Accept: "application/json" }),
+        }, effectiveProxy);
+        return { valid: res.ok, error: res.ok ? null : "Invalid API key" };
       }
       default:
         return { valid: false, error: "Provider test not supported" };

@@ -243,18 +243,22 @@ describe("cline /api/v1/models aggregation (resolveClineModels vs resolveClinepa
     expect(ids).toContain("z-ai/deepseek-v4-flash");
   });
 
-  it("resolveClinepassModels returns only cline-pass/ models", async () => {
+  it("resolveClinepassModels reads the feed tier, not the /models catalog", async () => {
+    // /api/v1/models no longer lists cline-pass/* ids; the feed's clinePass[] is
+    // the live source (see tests/unit/clinepass-live-catalog.test.js).
     const { resolveClinepassModels } = await import("../../open-sse/services/clinepassModels.js");
-    fetchMock.mockResolvedValue({
+    fetchMock.mockImplementation(async (url) => ({
       ok: true,
-      json: async () => API_RESPONSE,
-    });
+      json: async () => (String(url).includes("recommended-models")
+        ? { clinePass: [{ id: "cline-pass/deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash" }, { id: "cline-pass/glm-5.3", name: "GLM-5.3" }] }
+        : API_RESPONSE),
+    }));
     const result = await resolveClinepassModels({ accessToken: "test-token" });
     expect(result).not.toBeNull();
     expect(result.models).toHaveLength(2);
     const ids = result.models.map((m) => m.id);
-    expect(ids).toContain("cline-pass/deepseek-v4-flash");
-    expect(ids).toContain("cline-pass/glm-5.2");
+    expect(ids).toContain("cline-pass/deepseek-v4.1-flash");
+    expect(ids).toContain("cline-pass/glm-5.3");
     expect(ids).not.toContain("z-ai/glm-5.3-flash");
   });
 

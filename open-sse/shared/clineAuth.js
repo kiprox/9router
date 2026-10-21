@@ -21,9 +21,11 @@ export function getClineAuthorizationHeader(token) {
   return accessToken ? `Bearer ${accessToken}` : "";
 }
 
-export function buildClineHeaders(token, extraHeaders = {}) {
-  const authorization = getClineAuthorizationHeader(token);
-  const headers = {
+// Static client-fingerprint headers Cline's API expects. Carries NO auth: the
+// Authorization header is owned by the executor's auth descriptor (so a header
+// hook can never clobber, or be clobbered by, the token).
+export function buildClineFingerprintHeaders() {
+  return {
     "HTTP-Referer": "https://cline.bot",
     "X-Title": "Cline",
     "User-Agent": `9Router/${APP_VERSION}`,
@@ -33,6 +35,13 @@ export function buildClineHeaders(token, extraHeaders = {}) {
     "X-CLIENT-VERSION": APP_VERSION,
     "X-CORE-VERSION": APP_VERSION,
     "X-IS-MULTIROOT": "false",
+  };
+}
+
+export function buildClineHeaders(token, extraHeaders = {}) {
+  const authorization = getClineAuthorizationHeader(token);
+  const headers = {
+    ...buildClineFingerprintHeaders(),
     ...extraHeaders,
   };
 
