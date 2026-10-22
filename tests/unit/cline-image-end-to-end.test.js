@@ -102,7 +102,7 @@ test("the Images API request becomes one chat completion on the configured model
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, "https://api.cline.bot/api/v1/chat/completions");
   assert.equal(calls[0].body.model, DEFAULT_MODEL);
-  assert.equal(calls[0].body.stream, true);
+  assert.equal("stream" in calls[0].body, false, "no stream key: the JSON body is the one that carries the picture");
   assert.deepEqual(calls[0].body.messages, [
     { role: "user", content: [{ type: "text", text: "a lighthouse" }] },
   ]);

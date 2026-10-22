@@ -11,6 +11,9 @@ import { saveRequestDetail } from "@/lib/usageDb.js";
 import { SSE_HEADERS_CORS as SSE_HEADERS, SSE_DONE } from "../../utils/sseConstants.js";
 import { upstreamResponseHeaders } from "../../utils/upstreamHeaders.js";
 import { unwrapClineEnvelope } from "../../shared/clineEnvelope.js";
+import { dedupeImages } from "../../utils/imageDedupe.js";
+import { emptyCompletionError } from "../../utils/completionGuard.js";
+import { withProviderContext } from "../../utils/error.js";
 
 // Codex returns Responses API SSE → which client format to translate INTO, by request sourceFormat.
 // Gemini-family all map to ANTIGRAVITY decoder; unknown sources fall back to OPENAI.
@@ -58,6 +61,51 @@ export function buildSSEFromCompletion(completion) {
 }
 
 /**
+ * Re-encode a JSON completion as a real `chat.completion.chunk` sequence.
+ *
+ * A single frame carrying a whole `chat.completion` is legal SSE but not what a
+ * streaming client reads: the OpenAI SDK and every `delta`-based reader look at
+ * `choices[0].delta`, so text and `images[]` were invisible to them even though
+ * the bytes were on the wire. This splits the completion the way an upstream
+ * would have streamed it — role, content, images, then finish_reason + usage.
+ *
+ * @param {object} completion - Body with a `choices` array
+ * @returns {string} SSE bytes ending in `[DONE]`
+ */
+export function buildSSEChunksFromCompletion(completion) {
+  const choice = completion?.choices?.[0] || {};
+  const message = choice.message || {};
+  const base = {
+    id: completion?.id || `chatcmpl-${Date.now()}`,
+    object: "chat.completion.chunk",
+    created: completion?.created || Math.floor(Date.now() / 1000),
+    model: completion?.model,
+  };
+  const chunk = (delta, finishReason = null, extra = {}) => `data: ${JSON.stringify({
+    ...base,
+    choices: [{ index: 0, delta, finish_reason: finishReason }],
+    ...extra,
+  })}\n\n`;
+
+  const frames = [chunk({ role: "assistant", content: "" })];
+  if (typeof message.content === "string" && message.content.length > 0) {
+    frames.push(chunk({ content: message.content }));
+  }
+  if (typeof message.reasoning_content === "string" && message.reasoning_content.length > 0) {
+    frames.push(chunk({ reasoning_content: message.reasoning_content }));
+  }
+  if (Array.isArray(message.images) && message.images.length > 0) {
+    frames.push(chunk({ images: message.images }));
+  }
+  if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+    frames.push(chunk({ tool_calls: message.tool_calls.map((call, index) => ({ index, ...call })) }));
+  }
+  frames.push(chunk({}, choice.finish_reason || "stop", completion?.usage ? { usage: completion.usage } : {}));
+  frames.push(SSE_DONE);
+  return frames.join("");
+}
+
+/**
  * Handle streaming response — pipe provider SSE through transform stream to client.
  */
 export async function handleStreamingResponse({ providerResponse, provider, model, sourceFormat, targetFormat, userAgent, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, clientRawRequest, onRequestSuccess, reqLogger, toolNameMap, customToolNames, streamController, onStreamComplete, streamDetailId, pxpipe, reqTag, log, credentials }) {
@@ -89,7 +137,7 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
     streamController?.handleError?.(new Error(`upstream non-SSE: ${status}`));
     return {
       success: false,
-      response: new Response(JSON.stringify({ error: { message: `[${status}]: ${shortMsg}` } }), {
+      response: new Response(JSON.stringify({ error: { message: withProviderContext(`[${status}]: ${shortMsg}`, provider, model) } }), {
         status,
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       }),
@@ -102,16 +150,42 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
   // piped through the SSE transform, which forwarded raw lines verbatim and
   // appended a [DONE], handing the client an unparseable JSON body. Re-encode a
   // real completion as one SSE frame; anything else is a broken upstream → 502.
+  //
+  // This branch is also how a `nonStreamOnlyModels` provider serves an SSE
+  // client (cline image models only carry the picture on the JSON body), so the
+  // completion is normalized exactly like the JSON path: deduped, and an empty
+  // one rejected instead of being streamed as a successful no-op.
   if (upstreamContentType.includes('application/json')) {
     const rawText = await providerResponse.text().catch(() => '');
     let parsed = null;
     try { parsed = JSON.parse(rawText); } catch { /* not JSON after all → broken path below */ }
     const completion = parsed ? unwrapClineEnvelope(parsed, provider) : null;
     if (Array.isArray(completion?.choices)) {
+      dedupeImages(completion);
+      const emptyCompletion = emptyCompletionError(completion, { provider, model });
+      if (emptyCompletion) {
+        const status = HTTP_STATUS.BAD_GATEWAY;
+        const message = withProviderContext(`[${status}]: ${emptyCompletion}`, provider, model);
+        if (log?.errorLine) log.errorLine(reqTag, "✗", `BLOCKED ${status} · ${provider}/${model} · empty completion\n    ${emptyCompletion}`);
+        streamController?.handleError?.(new Error("upstream returned an empty completion"));
+        return {
+          success: false,
+          response: new Response(JSON.stringify({ error: { message } }), {
+            status,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          }),
+        };
+      }
       if (log?.debug) log.debug("STREAM", `${provider}/${model} | upstream JSON despite stream → re-encoded as SSE`);
+      // Providers that declare `jsonToSseChunks` get a real chunk sequence, so a
+      // delta-based client sees the content and images; everyone else keeps the
+      // single-frame encoding this branch has always produced.
+      const body = PROVIDERS[provider]?.quirks?.jsonToSseChunks
+        ? buildSSEChunksFromCompletion(completion)
+        : buildSSEFromCompletion(completion);
       return {
         success: true,
-        response: new Response(buildSSEFromCompletion(completion), {
+        response: new Response(body, {
           headers: { ...SSE_HEADERS, ...upstreamResponseHeaders(providerResponse.headers) },
         }),
       };
@@ -125,7 +199,7 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
     streamController?.handleError?.(new Error("upstream returned JSON for a stream request"));
     return {
       success: false,
-      response: new Response(JSON.stringify({ error: { message: `[${status}]: ${shortMsg}` } }), {
+      response: new Response(JSON.stringify({ error: { message: withProviderContext(`[${status}]: ${shortMsg}`, provider, model) } }), {
         status,
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       }),

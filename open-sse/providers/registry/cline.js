@@ -22,12 +22,42 @@ export default {
       "HTTP-Referer": "https://cline.bot",
       "X-Title": "Cline",
     },
-    // Non-stream chat completions come back wrapped in {"success":true,"data":{...}}
-    // Image models only answer the streaming variant: `stream:false` yields an
-    // "empty response content" 500, so the stream decision must be forced to SSE
-    // and converted back for JSON clients (chatCore handleForcedSSEToJson).
-    // No /g flag — a stateful .test() would skip every other request.
-    quirks: { clineEnvelope: true, forceStreamModels: /image/i },
+    // Non-stream chat completions come back wrapped in {"success":true,"data":{...}}.
+    //
+    // Image models are chat models whose picture rides in
+    // `choices[].message.images[]` (data URI PNG). Measured 2026-10-22 through
+    // this gateway against api.cline.bot:
+    //   body with no stream key   → 200 + message.images[]   (the picture)
+    //   body {"stream":false}     → 500 "empty response content"
+    //   body {"stream":true}      → 200, delta.content only, images[] empty
+    // So the picture lives on the NON-stream body and an explicit `stream:false`
+    // is what breaks it. Hence:
+    //   • nonStreamOnlyModels — never ask these models to stream; an SSE client
+    //     still gets SSE, re-encoded from the JSON completion by
+    //     handleStreamingResponse.
+    //   • imageModels — the Images API adapter's "is this an image model" test.
+    //   • omitStreamFlagWhenFalse — send no key at all rather than `false`, which
+    //     is what returns 500 (the OpenAI spec default is already non-stream).
+    //   • rejectEmptyCompletion — a 200 with no text, no images and no tool calls
+    //     is an upstream failure, not a success (gemini-3-pro-image answers
+    //     exactly that for every prompt), so it becomes an honest 502 naming
+    //     provider+model instead of an empty 200.
+    // No /g flag on any regex — a stateful .test() would skip every other request.
+    // The pattern covers cline's image ids by BOTH spellings: the
+    // `gemini-*-image` family and the `gemini-nano-banana-*` alias (the same
+    // model under a name that never contains "image").
+    quirks: {
+      clineEnvelope: true,
+      imageModels: /image|nano-?banana/i,
+      nonStreamOnlyModels: /image|nano-?banana/i,
+      omitStreamFlagWhenFalse: true,
+      rejectEmptyCompletion: true,
+      // An SSE client served from the JSON body must receive real
+      // `chat.completion.chunk` frames — a delta-based reader (OpenAI SDK,
+      // nanobot-ai) looks only at `choices[0].delta`, so a single whole-completion
+      // frame carried the picture on the wire but left the client with nothing.
+      jsonToSseChunks: true,
+    },
     tokenUrl: "https://api.cline.bot/api/v1/auth/token",
     refreshUrl: "https://api.cline.bot/api/v1/auth/refresh",
     auth: {

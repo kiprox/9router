@@ -4,14 +4,16 @@
 // appended `data: [DONE]` — a body no SSE client can parse (and whose cline
 // {"success":true,"data":{…}} envelope hid the choices one level down).
 //
-// Now a real completion is re-encoded as one valid SSE frame + [DONE], and
-// anything else becomes a clean 502 JSON error instead of a broken stream.
+// Now a real completion is re-encoded as SSE, and anything else becomes a clean
+// 502 JSON error instead of a broken stream. Cline additionally declares
+// `quirks.jsonToSseChunks`, so its SSE clients get real `chat.completion.chunk`
+// deltas (a delta-based reader ignores a whole-completion frame).
 //
 // Run: node --test --import ./tests/unit/.support/open-sse-alias-loader.mjs \
 //        tests/unit/cline-streaming-json-envelope.test.js
 import test from "node:test";
 import assert from "node:assert/strict";
-import { handleStreamingResponse, buildSSEFromCompletion } from "../../open-sse/handlers/chatCore/streamingHandler.js";
+import { handleStreamingResponse, buildSSEFromCompletion, buildSSEChunksFromCompletion } from "../../open-sse/handlers/chatCore/streamingHandler.js";
 import { FORMATS } from "../../open-sse/translator/formats.js";
 
 const COMPLETION = {
@@ -48,7 +50,7 @@ async function readBody(result) {
   return { contentType: result.response.headers.get("content-type"), text: await result.response.text() };
 }
 
-test("wrapped cline envelope is unwrapped and re-emitted as valid SSE", async () => {
+test("wrapped cline envelope is unwrapped and re-emitted as valid SSE chunks", async () => {
   const result = await handleStreamingResponse(baseArgs(jsonResponse({ success: true, data: COMPLETION })));
 
   assert.equal(result.success, true);
@@ -56,23 +58,35 @@ test("wrapped cline envelope is unwrapped and re-emitted as valid SSE", async ()
   assert.match(contentType, /text\/event-stream/);
 
   const frames = text.split("\n\n").filter(Boolean);
-  assert.equal(frames.length, 2, "one completion frame + the terminal frame");
-  assert.ok(frames[0].startsWith("data: "), "frame must carry the SSE prefix");
-  assert.equal(frames[1], "data: [DONE]");
+  assert.ok(frames.length > 2, "a delta sequence, not one whole-completion frame");
+  assert.equal(frames.at(-1), "data: [DONE]");
+  for (const frame of frames.slice(0, -1)) {
+    assert.ok(frame.startsWith("data: "), "every frame must carry the SSE prefix");
+    const payload = JSON.parse(frame.slice("data: ".length));
+    assert.equal(payload.object, "chat.completion.chunk");
+    assert.equal(payload.success, undefined, "the envelope must not leak into a chunk");
+  }
 
-  const payload = JSON.parse(frames[0].slice("data: ".length));
-  assert.deepEqual(payload, COMPLETION, "unwrapped completion, not the envelope");
-  assert.equal(payload.success, undefined);
-  assert.equal(payload.choices[0].message.images.length, 1);
+  // The picture rides on its own delta — that is what a streaming client reads.
+  const deltas = frames.slice(0, -1).map((f) => JSON.parse(f.slice("data: ".length)).choices[0].delta);
+  const imageDelta = deltas.find((d) => Array.isArray(d.images) && d.images.length > 0);
+  assert.ok(imageDelta, "images[] must survive the JSON→SSE conversion");
+  assert.equal(imageDelta.images[0].image_url.url, "data:image/png;base64,AAA");
+  assert.ok(deltas.some((d) => d.content === "hi"), "text content is streamed as a delta too");
 });
 
 test("bare completion JSON is re-emitted as SSE too (any provider that ignores stream)", async () => {
-  for (const provider of ["cline", "openai"]) {
-    const result = await handleStreamingResponse(baseArgs(jsonResponse(COMPLETION), provider));
-    assert.equal(result.success, true, provider);
-    const { text } = await readBody(result);
-    assert.deepEqual(JSON.parse(text.split("\n\n")[0].slice("data: ".length)), COMPLETION);
-  }
+  // cline opts into chunked frames; a provider that did not keeps the single
+  // whole-completion frame this branch has always produced.
+  const clineResult = await handleStreamingResponse(baseArgs(jsonResponse(COMPLETION), "cline"));
+  assert.equal(clineResult.success, true);
+  const clineText = (await readBody(clineResult)).text;
+  assert.match(clineText, /chat\.completion\.chunk/);
+
+  const otherResult = await handleStreamingResponse(baseArgs(jsonResponse(COMPLETION), "openai"));
+  assert.equal(otherResult.success, true);
+  const otherText = (await readBody(otherResult)).text;
+  assert.deepEqual(JSON.parse(otherText.split("\n\n")[0].slice("data: ".length)), COMPLETION);
 });
 
 test("JSON that is not a completion becomes a clean 502 error body", async () => {
@@ -84,9 +98,29 @@ test("JSON that is not a completion becomes a clean 502 error body", async () =>
   assert.match(contentType, /application\/json/);
 
   const body = JSON.parse(text);
-  assert.match(body.error.message, /^\[502\]: /);
+  // The upstream that produced the failure is named, not just the status code.
+  assert.match(body.error.message, /^\[cline\/google\/gemini-2\.5-flash-image\] \[502\]: /);
   assert.match(body.error.message, /no choices: empty response content/);
   assert.doesNotMatch(text, /\[DONE\]/, "an error body must never carry SSE terminal bytes");
+});
+
+test("a 200 with an empty completion is a 502, never a successful no-op stream", async () => {
+  const empty = {
+    id: "chatcmpl-1",
+    object: "chat.completion",
+    model: "google/gemini-3-pro-image",
+    choices: [{ index: 0, message: { role: "assistant", content: "" }, finish_reason: "stop" }],
+  };
+  const result = await handleStreamingResponse({
+    ...baseArgs(jsonResponse(empty)),
+    model: "google/gemini-3-pro-image",
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.response.status, 502);
+  const body = JSON.parse((await readBody(result)).text);
+  assert.match(body.error.message, /cline\/google\/gemini-3-pro-image/);
+  assert.match(body.error.message, /empty completion/i);
 });
 
 test("an envelope is only unwrapped for providers that opted in (no cross-provider rewrite)", async () => {
@@ -113,4 +147,23 @@ test("an upstream error status keeps its own status code in the JSON branch", as
 
 test("buildSSEFromCompletion produces exactly one frame plus [DONE]", () => {
   assert.equal(buildSSEFromCompletion({ choices: [] }), 'data: {"choices":[]}\n\ndata: [DONE]\n\n');
+});
+
+test("buildSSEChunksFromCompletion splits a completion into delta frames", () => {
+  const sse = buildSSEChunksFromCompletion(COMPLETION);
+  const frames = sse.split("\n\n").filter(Boolean);
+  assert.equal(frames.at(-1), "data: [DONE]");
+
+  const chunks = frames.slice(0, -1).map((f) => JSON.parse(f.slice("data: ".length)));
+  for (const chunk of chunks) {
+    assert.equal(chunk.object, "chat.completion.chunk");
+    assert.equal(chunk.id, COMPLETION.id);
+    assert.equal(chunk.model, COMPLETION.model);
+  }
+  // The last chunk carries the finish reason and the usage trailer.
+  assert.equal(chunks.at(-1).choices[0].finish_reason, "stop");
+  assert.deepEqual(chunks.at(-1).usage, COMPLETION.usage);
+  // Nothing is invented for a completion with no output at all.
+  const bare = buildSSEChunksFromCompletion({ choices: [{ message: {}, finish_reason: "stop" }] });
+  assert.equal(bare.split("\n\n").filter(Boolean).length, 3, "role frame + finish frame + [DONE]");
 });

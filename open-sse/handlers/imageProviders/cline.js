@@ -1,10 +1,11 @@
 // Cline image adapter — the Images API on top of Cline's chat-completions endpoint.
 //
 // Cline exposes no `/images/generations`: its image models are chat models that
-// answer the prompt with the picture in `choices[].message.images[]`, and they
-// only answer the streaming variant of that endpoint. The adapter therefore
-// posts one chat completion per requested image and maps the images back to the
-// OpenAI Images shape.
+// answer the prompt with the picture in `choices[].message.images[]`. The
+// picture lives on the NON-stream body — `stream:true` returns text only, and an
+// explicit `stream:false` returns 500 "empty response content" — so the adapter
+// posts one chat completion per requested image with no `stream` key at all and
+// maps the images back to the OpenAI Images shape.
 //
 // Transport goes through the executor (`executeViaExecutor`) — the path every
 // chat request takes (executor → transport → auth hooks → proxy). That is also
@@ -41,7 +42,7 @@ const chatModel = () => imageConfig().chatModel;
 const stripProviderPrefix = (model) => String(model).replace(PROVIDER_PREFIX, "");
 
 function isClineImageModel(model) {
-  const pattern = PROVIDERS[PROVIDER_ID]?.quirks?.forceStreamModels;
+  const pattern = PROVIDERS[PROVIDER_ID]?.quirks?.imageModels;
   return pattern instanceof RegExp && pattern.test(model);
 }
 
@@ -102,9 +103,10 @@ function buildChatBody(model, body) {
   return {
     model,
     messages: [{ role: ROLE.USER, content: buildContent(body?.prompt, body) }],
-    // Image models only answer the streaming variant of the endpoint
-    // (transport.quirks.forceStreamModels).
-    stream: isClineImageModel(model),
+    // Image models carry the picture on the NON-stream body only
+    // (transport.quirks.nonStreamOnlyModels): asking for SSE drops it entirely,
+    // and an explicit `stream:false` returns 500 "empty response content", so
+    // the key is omitted and the OpenAI default (non-stream) applies.
   };
 }
 

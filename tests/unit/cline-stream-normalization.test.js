@@ -48,7 +48,6 @@ test("Gemini-family wire formats always stream (their agents cannot parse JSON)"
 
 test("provider forceStream wins; a non-interactive deepseek-tui run still forces JSON", () => {
   assert.equal(decide({}, { providerRequiresStreaming: true }), true);
-  assert.equal(decide({}, { forceStreamModels: true }), true);
   // deepseek-tui -p: no explicit stream → JSON, even when Accept claims SSE.
   assert.equal(decide({}, { clientNoStream: true }), false);
   assert.equal(decide({}, { clientNoStream: true, accept: "text/event-stream" }), false);

@@ -82,12 +82,11 @@ export function stripContinuityFields(body) {
  * @param {boolean} [opts.clientNoStream] - Client cannot parse SSE and sent no
  *   explicit `stream` (deepseek-tui non-interactive run)
  * @param {boolean} [opts.providerRequiresStreaming] - PROVIDERS[provider].forceStream
- * @param {boolean} [opts.forceStreamModels] - Provider quirk forceStreamModels.test(model)
  * @returns {boolean}
  */
-export function shouldStreamUpstream({ body, sourceFormat, acceptHeader = "", jsonOnlyAccept = false, clientNoStream = false, providerRequiresStreaming = false, forceStreamModels = false }) {
+export function shouldStreamUpstream({ body, sourceFormat, acceptHeader = "", jsonOnlyAccept = false, clientNoStream = false, providerRequiresStreaming = false }) {
   // Explicit request/provider facts beat every heuristic below.
-  if (providerRequiresStreaming || forceStreamModels) return true;
+  if (providerRequiresStreaming) return true;
   if (body?.stream === true) return true;
   if (body?.stream === false) return false;
 
@@ -112,12 +111,17 @@ export function shouldStreamUpstream({ body, sourceFormat, acceptHeader = "", js
  * @param {object} targetBody - Object handed to executor.execute()
  * @param {string} finalFormat - Format we speak to the upstream
  * @param {boolean} stream - Stream decision for this request
+ * @param {boolean} [omitWhenFalse] - Drop the key instead of sending `false`
  * @returns {object} The same body (mutated), or the input when not applicable
  */
-export function applyUpstreamStreamFlag(targetBody, finalFormat, stream) {
+export function applyUpstreamStreamFlag(targetBody, finalFormat, stream, omitWhenFalse = false) {
   if (finalFormat !== FORMATS.OPENAI) return targetBody;
   if (!targetBody || typeof targetBody !== "object" || Array.isArray(targetBody)) return targetBody;
-  targetBody.stream = stream;
+  // Some upstreams treat an explicit `stream:false` differently from an absent
+  // key (cline image models answer 500 "empty response content" for the former
+  // and a normal completion for the latter). Omitting keeps the OpenAI default.
+  if (!stream && omitWhenFalse) delete targetBody.stream;
+  else targetBody.stream = stream;
   return targetBody;
 }
 
@@ -206,7 +210,6 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   // path, where an upstream JSON envelope was piped to the client followed by a
   // stray `data: [DONE]`.
   const acceptHeader = clientRawRequest?.headers?.accept || "";
-  const clientRequestedStreaming = body.stream === true || sourceFormat === FORMATS.ANTIGRAVITY || sourceFormat === FORMATS.GEMINI || sourceFormat === FORMATS.GEMINI_CLI;
   const providerRequiresStreaming = PROVIDERS[provider]?.forceStream === true;
 
   // DeepSeek-TUI: interactive TUI panel sends stream:true and needs SSE.
@@ -214,12 +217,19 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   // Hoisted above the decision so the -p run is always non-stream.
   const detectedTool = detectClientTool(clientRawRequest?.headers || {}, body);
 
-  // Provider-config quirk: some upstreams (e.g. cline image models) only answer
-  // the streaming variant, so a client asking for JSON must still stream
-  // upstream and be converted back. Regex has no /g flag → .test() is stateless.
-  const forceStreamModels = PROVIDERS[provider]?.quirks?.forceStreamModels?.test(model) === true;
+  // Provider-config quirk: some upstreams answer the streaming variant of an
+  // endpoint differently from the JSON one — cline image models return the
+  // picture in `message.images[]` on the NON-stream body and only text (or
+  // nothing) on the streamed one. Those models must never be asked to stream;
+  // a client that wants SSE still gets it, re-encoded from the JSON completion
+  // by handleStreamingResponse. Regexes have no /g flag → .test() is stateless.
+  const quirks = PROVIDERS[provider]?.quirks || {};
+  const nonStreamOnlyModel = quirks.nonStreamOnlyModels?.test(model) === true;
 
-  let stream = shouldStreamUpstream({
+  // What the CLIENT gets, and what we ask the UPSTREAM for. They differ when a
+  // provider only serves one variant: the client's wire format is a promise we
+  // keep locally, the upstream request is whatever actually works.
+  const clientStreams = shouldStreamUpstream({
     body,
     sourceFormat,
     acceptHeader,
@@ -228,8 +238,8 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     // A deepseek-tui non-interactive run (-p) sends no `stream` and cannot parse SSE.
     clientNoStream: detectedTool === "deepseek-tui",
     providerRequiresStreaming,
-    forceStreamModels,
   });
+  let stream = clientStreams && !nonStreamOnlyModel;
 
   // Image generation models require non-streaming (Google v1internal:generateContent)
   const modelType = getModelType(alias, model);
@@ -401,7 +411,10 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   // is the only consumer. The OpenAI→OpenAI request path runs no translator, so
   // without this the upstream never received a `stream` key at all and guessed:
   // cline then answered the SSE-expecting pipe with a non-stream envelope.
-  applyUpstreamStreamFlag(translatedBody, finalFormat, stream);
+  // `omitStreamFlagWhenFalse` providers want the key absent rather than `false`:
+  // cline answers an explicit `stream:false` on its image models with a 500
+  // "empty response content", while an absent key returns the picture.
+  applyUpstreamStreamFlag(translatedBody, finalFormat, stream, quirks.omitStreamFlagWhenFalse === true);
 
   // Pin cache breakpoints to the final body — every saver above can reshape
   // system/tools/messages, and a stale anchor costs a full prefix rewrite.
@@ -586,7 +599,10 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     return createErrorResult(statusCode, errMsg, resetsAtMs, upstreamResponseHeaders(providerResponse.headers));
   }
 
-  const sharedCtx = { provider, model, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, clientRawRequest, onRequestSuccess, pxpipe: pxpipeSummary, reqTag, log };
+  // `stream` in this context is the CLIENT's intent: request details and the
+  // stream-complete callback describe what the caller asked for, which differs
+  // from the upstream decision for nonStreamOnlyModels.
+  const sharedCtx = { provider, model, body, stream: clientStreams, translatedBody, finalBody, requestStartTime, connectionId, apiKey, clientRawRequest, onRequestSuccess, pxpipe: pxpipeSummary, reqTag, log };
   const appendLog = (extra) => appendRequestLog({ model, provider, connectionId, ...extra }).catch(() => { });
   const trackDone = () => trackPendingRequest(model, provider, connectionId, false);
 
@@ -594,24 +610,27 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   // streams upstream (openaiToOpenAIResponsesRequest pins stream:true), so a
   // non-stream OpenAI/native client behind a Responses upstream must also take
   // this path — handleForcedSSEToJson returns null when the body is not SSE.
-  // Same for a provider that only answers some models in streaming form
-  // (registry quirk forceStreamModels, e.g. cline image models): we streamed
-  // upstream on the client's behalf, so the JSON client still gets a converted body.
-  if (!clientRequestedStreaming && (providerRequiresStreaming || providerResponseFormat === FORMATS.OPENAI_RESPONSES || forceStreamModels)) {
+  if (!clientStreams && (providerRequiresStreaming || providerResponseFormat === FORMATS.OPENAI_RESPONSES)) {
     const result = await handleForcedSSEToJson({ ...sharedCtx, providerResponse, sourceFormat, targetFormat: providerResponseFormat, customToolNames, toolNameMap, trackDone, appendLog });
     if (result) { streamController.handleComplete(); return result; }
   }
 
-  // True non-streaming response
-  if (!stream) {
-    const result = await handleNonStreamingResponse({ ...sharedCtx, providerResponse, sourceFormat, targetFormat: providerResponseFormat, reqLogger, toolNameMap, customToolNames, trackDone, appendLog });
-    streamController.handleComplete();
-    return result;
+  // The client asked for SSE but this model only answers the JSON variant: read
+  // the completion and re-emit it as SSE. Same handler as the true stream path —
+  // it re-encodes an application/json body from an upstream that ignored
+  // `stream`, and a non-JSON answer becomes an honest 502 instead of an empty
+  // stream. Scoped to `nonStreamOnlyModel` so a provider that pins image
+  // generation to a non-stream endpoint (antigravity/gemini-cli) keeps returning
+  // the JSON body it always has.
+  if (stream || (clientStreams && nonStreamOnlyModel)) {
+    const { onStreamComplete, streamDetailId } = buildOnStreamComplete({ ...sharedCtx, stream: clientStreams });
+    return handleStreamingResponse({ ...sharedCtx, providerResponse, sourceFormat, targetFormat: providerResponseFormat, userAgent, reqLogger, toolNameMap, customToolNames, streamController, onStreamComplete, streamDetailId, credentials });
   }
 
-  // Streaming response
-  const { onStreamComplete, streamDetailId } = buildOnStreamComplete({ ...sharedCtx });
-  return handleStreamingResponse({ ...sharedCtx, providerResponse, sourceFormat, targetFormat: providerResponseFormat, userAgent, reqLogger, toolNameMap, customToolNames, streamController, onStreamComplete, streamDetailId, credentials });
+  // True non-streaming response
+  const result = await handleNonStreamingResponse({ ...sharedCtx, providerResponse, sourceFormat, targetFormat: providerResponseFormat, reqLogger, toolNameMap, customToolNames, trackDone, appendLog });
+  streamController.handleComplete();
+  return result;
 }
 
 export function isTokenExpiringSoon(expiresAt, bufferMs = 5 * 60 * 1000) {

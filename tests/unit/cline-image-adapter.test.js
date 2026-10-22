@@ -204,7 +204,9 @@ test("the default image model is config-driven, not hardcoded in the adapter", (
 test("buildBody maps a prompt to one user message on the configured image model", () => {
   const body = clineAdapter.buildBody(DEFAULT_MODEL, { prompt: "a lighthouse at dusk" });
   assert.equal(body.model, DEFAULT_MODEL);
-  assert.equal(body.stream, true, "cline image models only answer the streaming variant");
+  // No `stream` key at all: the picture rides on the JSON body, and an explicit
+  // `stream:false` is what makes cline answer 500 "empty response content".
+  assert.equal("stream" in body, false, "neither stream:true nor stream:false");
   assert.deepEqual(body.messages, [
     { role: "user", content: [{ type: "text", text: "a lighthouse at dusk" }] },
   ]);
@@ -340,7 +342,7 @@ test("the request hits the executor's cline transport with fingerprint headers",
   assert.equal(calls[0].url, CHAT_URL);
   assert.match(calls[0].headers.Authorization, /^Bearer workos:eyJhbGciOi/, "OAuth token keeps its workos: shape");
   assert.equal(calls[0].headers["X-CLIENT-TYPE"], "9router");
-  assert.equal(calls[0].body.stream, true);
+  assert.equal("stream" in calls[0].body, false, "no stream key — the JSON body carries the picture");
 });
 
 test("an upstream 500 'empty response content' stays an error with its status and message", async () => {
