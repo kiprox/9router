@@ -13,6 +13,7 @@ import { appendRequestLog, saveRequestDetail } from "@/lib/usageDb.js";
 import { decloakToolNames } from "../../utils/claudeCloaking.js";
 import { restoreToolNames } from "../../utils/opencodeFingerprint.js";
 import { dedupeImages } from "../../utils/imageDedupe.js";
+import { emptyCompletionError } from "../../utils/completionGuard.js";
 import { ROLE, RESPONSES_ITEM } from "../../translator/schema/index.js";
 
 /**
@@ -262,6 +263,18 @@ export async function handleNonStreamingResponse({ providerResponse, provider, m
   // bare OpenAI body and usage tracking sees data.usage. No-op unless the
   // provider opts in via transport.quirks.clineEnvelope.
   responseBody = unwrapClineEnvelope(responseBody, provider);
+
+  // A 200 with nothing in it is a failure, not a success. Some upstreams answer
+  // exactly that for a model that cannot serve the request (cline's
+  // google/gemini-3-pro-image: `content:""`, 0 images, every prompt), and the
+  // client has no way to tell it apart from a genuinely empty reply — it renders
+  // nothing and reports success. Opt-in per provider via
+  // transport.quirks.rejectEmptyCompletion.
+  const emptyCompletion = emptyCompletionError(responseBody, { provider, model });
+  if (emptyCompletion) {
+    appendLog({ status: `FAILED ${HTTP_STATUS.BAD_GATEWAY}` });
+    return createErrorResult(HTTP_STATUS.BAD_GATEWAY, `[${provider}/${model}] ${emptyCompletion}`);
+  }
 
   reqLogger.logProviderResponse(providerResponse.status, providerResponse.statusText, providerResponse.headers, responseBody);
   if (onRequestSuccess) {

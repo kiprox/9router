@@ -45,6 +45,11 @@ export function hasValuableContent(chunk, format) {
     return delta.content && delta.content !== "" ||
            delta.reasoning_content && delta.reasoning_content !== "" ||
            delta.tool_calls && delta.tool_calls.length > 0 ||
+           // Image-generation models stream the picture as `delta.images[]` with
+           // no text alongside it. Without this the whole payload was classified
+           // empty and dropped, so a `stream:true` client received a completion
+           // with zero images and no error (cline gemini-2.5-flash-image).
+           (Array.isArray(delta.images) && delta.images.length > 0) ||
            chunk.choices[0].finish_reason ||
            delta.role;
   }
