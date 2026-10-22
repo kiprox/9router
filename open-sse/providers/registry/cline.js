@@ -48,7 +48,21 @@ export default {
     { id: "google/gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview" },
     { id: "google/gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite Preview" },
     { id: "kwaipilot/kat-coder-pro", name: "KAT Coder Pro" },
+    // Image models answer as chat completions with the picture in
+    // `message.images[]`; the Images API reaches them through
+    // handlers/imageProviders/cline.js. No `size` param — the endpoint takes the
+    // prompt only, so advertising a size would be a lie to the dashboard.
+    { id: "google/gemini-2.5-flash-image", name: "Gemini 2.5 Flash Image (Nano Banana)", kind: "image", params: ["n"] },
   ],
+  serviceKinds: ["llm", "image"],
+  // Images-API surface for this provider (no `/images/generations` upstream — the
+  // adapter posts chat completions to transport.baseUrl instead).
+  //   chatModel: model used when the request names none (or names a chat model)
+  //   maxN:      cap on `n`, each value is one billed chat completion
+  imageConfig: {
+    chatModel: "google/gemini-2.5-flash-image",
+    maxN: 4,
+  },
   oauth: {
     appBaseUrl: "https://app.cline.bot",
     apiBaseUrl: "https://api.cline.bot",

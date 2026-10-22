@@ -5,6 +5,20 @@ import { dbg } from "./debugLog.js";
 const originalFetch = globalThis.fetch;
 const proxyDispatchers = new Map();
 
+// Test seam: `proxyAwareFetch` is captured at module load, so replacing
+// `globalThis.fetch` after import cannot intercept an executor request. A test
+// sets a handler here instead of standing up a local server; production never
+// touches it (null = normal fetch path).
+let testFetch = null;
+
+export function __setTestFetch(handler) {
+  testFetch = handler;
+}
+
+export function __clearTestFetch() {
+  testFetch = null;
+}
+
 // ─── TLS fingerprinting via got-scraping (browser-like JA3) ───────────────
 // Disabled: not in use. Kept commented for future re-enable.
 // Restore the original block to re-enable per-host JA3 spoofing.
@@ -330,6 +344,7 @@ async function createBypassRequest(parsedUrl, realIP, options) {
 }
 
 export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
+  if (testFetch) return testFetch(url, options);
   const targetUrl = typeof url === "string" ? url : url.toString();
 
   // Vercel relay: forward request via relay headers
