@@ -23,7 +23,11 @@ export default {
       "X-Title": "Cline",
     },
     // Non-stream chat completions come back wrapped in {"success":true,"data":{...}}
-    quirks: { clineEnvelope: true },
+    // Image models only answer the streaming variant: `stream:false` yields an
+    // "empty response content" 500, so the stream decision must be forced to SSE
+    // and converted back for JSON clients (chatCore handleForcedSSEToJson).
+    // No /g flag — a stateful .test() would skip every other request.
+    quirks: { clineEnvelope: true, forceStreamModels: /image/i },
     tokenUrl: "https://api.cline.bot/api/v1/auth/token",
     refreshUrl: "https://api.cline.bot/api/v1/auth/refresh",
     auth: {
