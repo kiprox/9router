@@ -7,8 +7,8 @@
 // and it has to reach three places — the stream decision, the outbound body, and
 // the forced SSE→JSON conversion — or a non-stream client gets an empty result.
 //
-// Bare node test (node --test tests/unit/cline-force-stream-image.test.js);
-// no test runner is wired in this repo (AGENTS.md).
+// Run: node --test --import ./tests/unit/.support/open-sse-alias-loader.mjs \
+//        tests/unit/cline-force-stream-image.test.js
 import test from "node:test";
 import assert from "node:assert/strict";
 import { PROVIDERS } from "../../open-sse/config/providers.js";

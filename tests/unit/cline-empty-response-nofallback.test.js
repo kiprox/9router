@@ -8,8 +8,8 @@
 // identically, so the caller must receive the real error and nothing may be
 // locked. Rate-limit/quota wording must keep its exponential backoff.
 //
-// Bare node test (node --test tests/unit/cline-empty-response-nofallback.test.js);
-// no test runner is wired in this repo (AGENTS.md).
+// Run: node --test tests/unit/cline-empty-response-nofallback.test.js
+// (this repo wires no test runner and ships no vitest, per AGENTS.md)
 import test from "node:test";
 import assert from "node:assert/strict";
 import { checkFallbackError, applyErrorState } from "../../open-sse/services/accountFallback.js";

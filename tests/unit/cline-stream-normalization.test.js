@@ -8,8 +8,10 @@
 // Accept header. The decision is also *sent* upstream, so the body can never be
 // interpreted differently on the two sides of the proxy.
 //
-// Bare node test (node --test tests/unit/cline-stream-normalization.test.js) — this
-// repo has no wired test runner (AGENTS.md), and no vitest is installed.
+// Run: node --test --import ./tests/unit/.support/open-sse-alias-loader.mjs \
+//        tests/unit/cline-stream-normalization.test.js
+// (The loader only maps the jsconfig `@/…` alias and stubs the DB-backed
+//  usageDb module; this repo wires no test runner and has no vitest, AGENTS.md.)
 import test from "node:test";
 import assert from "node:assert/strict";
 import { shouldStreamUpstream, applyUpstreamStreamFlag } from "../../open-sse/handlers/chatCore.js";
