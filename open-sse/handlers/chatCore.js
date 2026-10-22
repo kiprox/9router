@@ -205,6 +205,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   // The old `body.stream !== false` default let every plain request take the SSE
   // path, where an upstream JSON envelope was piped to the client followed by a
   // stray `data: [DONE]`.
+  const acceptHeader = clientRawRequest?.headers?.accept || "";
   const clientRequestedStreaming = body.stream === true || sourceFormat === FORMATS.ANTIGRAVITY || sourceFormat === FORMATS.GEMINI || sourceFormat === FORMATS.GEMINI_CLI;
   const providerRequiresStreaming = PROVIDERS[provider]?.forceStream === true;
 
@@ -218,7 +219,6 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   // upstream and be converted back. Regex has no /g flag → .test() is stateless.
   const forceStreamModels = PROVIDERS[provider]?.quirks?.forceStreamModels?.test(model) === true;
 
-  const acceptHeader = clientRawRequest?.headers?.accept || "";
   let stream = shouldStreamUpstream({
     body,
     sourceFormat,
