@@ -8,8 +8,9 @@ import { buildAbortedResponsesTerminalBytes } from "../../utils/responsesStreamH
 import { buildStreamErrorBytes } from "../../utils/streamHelpers.js";
 import { buildRequestDetail, extractRequestConfig, saveUsageStats, formatDoneLine } from "./requestDetail.js";
 import { saveRequestDetail } from "@/lib/usageDb.js";
-import { SSE_HEADERS_CORS as SSE_HEADERS } from "../../utils/sseConstants.js";
+import { SSE_HEADERS_CORS as SSE_HEADERS, SSE_DONE } from "../../utils/sseConstants.js";
 import { upstreamResponseHeaders } from "../../utils/upstreamHeaders.js";
+import { unwrapClineEnvelope } from "../../shared/clineEnvelope.js";
 
 // Codex returns Responses API SSE → which client format to translate INTO, by request sourceFormat.
 // Gemini-family all map to ANTIGRAVITY decoder; unknown sources fall back to OPENAI.
@@ -43,6 +44,20 @@ function buildTransformStream({ provider, sourceFormat, targetFormat, userAgent,
 }
 
 /**
+ * Re-encode a JSON chat-completion body as a valid SSE stream.
+ *
+ * One `data:` frame holding the completion, then the terminal `[DONE]` — the
+ * same shape a streaming provider would have produced, so every downstream
+ * SSE transform in stream.js treats it identically.
+ *
+ * @param {object} completion - Body with a `choices` array
+ * @returns {string} SSE bytes
+ */
+export function buildSSEFromCompletion(completion) {
+  return `data: ${JSON.stringify(completion)}\n\n${SSE_DONE}`;
+}
+
+/**
  * Handle streaming response — pipe provider SSE through transform stream to client.
  */
 export async function handleStreamingResponse({ providerResponse, provider, model, sourceFormat, targetFormat, userAgent, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, clientRawRequest, onRequestSuccess, reqLogger, toolNameMap, customToolNames, streamController, onStreamComplete, streamDetailId, pxpipe, reqTag, log, credentials }) {
@@ -72,6 +87,42 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
     if (log?.errorLine) log.errorLine(reqTag, "✗", `BLOCKED ${status} · ${provider}/${model} · non-SSE (${upstreamContentType})\n    ${shortMsg}`);
     else console.warn(`[STREAM] ${provider} | ${model} | blocked pipe: ${shortMsg} [${status}]`);
     streamController?.handleError?.(new Error(`upstream non-SSE: ${status}`));
+    return {
+      success: false,
+      response: new Response(JSON.stringify({ error: { message: `[${status}]: ${shortMsg}` } }), {
+        status,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      }),
+    };
+  }
+
+  // Defense-in-depth: we asked for SSE but the upstream answered application/json.
+  // Cline does exactly this for a plain OpenAI→OpenAI request whose body carried
+  // no `stream` key — its {"success":true,"data":{…choices…}} envelope used to be
+  // piped through the SSE transform, which forwarded raw lines verbatim and
+  // appended a [DONE], handing the client an unparseable JSON body. Re-encode a
+  // real completion as one SSE frame; anything else is a broken upstream → 502.
+  if (upstreamContentType.includes('application/json')) {
+    const rawText = await providerResponse.text().catch(() => '');
+    let parsed = null;
+    try { parsed = JSON.parse(rawText); } catch { /* not JSON after all → broken path below */ }
+    const completion = parsed ? unwrapClineEnvelope(parsed, provider) : null;
+    if (Array.isArray(completion?.choices)) {
+      if (log?.debug) log.debug("STREAM", `${provider}/${model} | upstream JSON despite stream → re-encoded as SSE`);
+      return {
+        success: true,
+        response: new Response(buildSSEFromCompletion(completion), {
+          headers: { ...SSE_HEADERS, ...upstreamResponseHeaders(providerResponse.headers) },
+        }),
+      };
+    }
+    const status = HTTP_STATUS.BAD_GATEWAY;
+    const shortMsg = (parsed
+      ? `Upstream returned JSON instead of an SSE stream (no choices${completion?.error ? `: ${completion.error.message || completion.error}` : ""})`
+      : "Upstream returned a body that is not an SSE stream").slice(0, 200);
+    if (log?.errorLine) log.errorLine(reqTag, "✗", `BLOCKED ${status} · ${provider}/${model} · JSON for a stream request\n    ${shortMsg}`);
+    else console.warn(`[STREAM] ${provider} | ${model} | ${shortMsg}`);
+    streamController?.handleError?.(new Error("upstream returned JSON for a stream request"));
     return {
       success: false,
       response: new Response(JSON.stringify({ error: { message: `[${status}]: ${shortMsg}` } }), {
