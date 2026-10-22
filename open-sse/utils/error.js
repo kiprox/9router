@@ -132,6 +132,30 @@ export function unavailableResponse(statusCode, message, retryAfter, retryAfterH
 }
 
 /**
+ * Prefix a message with `[provider/model]` unless it already carries it.
+ *
+ * Upstream failures are only actionable when the caller can see which upstream
+ * produced them: a bare "[500]: …" reads like a bug in this gateway, and the
+ * same wording from two models in one combo is indistinguishable. Idempotent so
+ * a message that was already tagged upstream (or by an earlier hop) is never
+ * tagged twice — the fallback paths wrap an error a handler already formatted.
+ *
+ * @param {string} message
+ * @param {string} provider
+ * @param {string} model
+ * @returns {string}
+ */
+export function withProviderContext(message, provider, model) {
+  const text = String(message ?? "");
+  if (!provider || !model) return text;
+  const context = `[${provider}/${model}]`;
+  // `includes`, not `startsWith`: a formatter may have wrapped the message in a
+  // status prefix first ("[502]: [cline/x] …"), and tagging that again would
+  // produce "[cline/x] [502]: [cline/x] …".
+  return text.includes(context) ? text : `${context} ${text}`;
+}
+
+/**
  * Format provider error with context
  * @param {Error} error - Original error
  * @param {string} provider - Provider name
@@ -146,5 +170,17 @@ export function formatProviderError(error, provider, model, statusCode) {
   const causeCode = error.cause?.code;
   const causeMsg = error.cause?.message;
   const causeStr = causeCode || causeMsg ? ` (cause: ${[causeCode, causeMsg].filter(Boolean).join(": ")})` : "";
-  return `[${code}]: ${message}${causeStr}`;
+
+  // Normalize whatever a previous hop already produced, then compose in one
+  // canonical order — `[provider/model] [code]: message`. A message that already
+  // carries a status prefix or the context (a handler formatted it, then a
+  // fallback loop re-wraps the same error) must not end up with either twice, in
+  // either order.
+  const context = provider && model ? `[${provider}/${model}]` : "";
+  let body = message;
+  if (context && body.startsWith(context)) body = body.slice(context.length).trimStart();
+  const statusPrefix = `[${code}]:`;
+  if (body.startsWith(statusPrefix)) body = body.slice(statusPrefix.length).trimStart();
+  body = `${statusPrefix} ${body}${causeStr}`;
+  return context ? `${context} ${body}` : body;
 }

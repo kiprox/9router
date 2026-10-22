@@ -210,6 +210,24 @@ const DEVIN_CLI_GPT_CAPS = { vision: true, reasoning: true, search: true, thinki
  * Provider-specific capability overrides. Keyed by provider alias/id.
  */
 export const PROVIDER_CAPABILITIES = {
+  // Cline's Gemini image models are chat models whose picture rides in
+  // `message.images[]`, and not every advertised id actually draws one.
+  // Evidence through this gateway: gemini-2.5-flash-image returned a 974 KB
+  // body with a 1024×1024 PNG, and gemini-nano-banana-2.1 a 2.3 MB body with
+  // message.images[]. gemini-3-pro-image and gemini-3.1-flash-image have only
+  // ever been seen answering `{"content":"","finish_reason":"stop"}` with zero
+  // images, so they are not advertised as image models: a client that trusts
+  // imageOutput:true spends one request per attempt and receives nothing.
+  // Flip an id back the moment a picture is observed from it. The provider quirk
+  // `rejectEmptyCompletion` already turns an empty 200 into an honest 502, so
+  // this table is about advertising, not about safety.
+  // Step 1 of the fallback chain short-circuits, so the limits ride along.
+  "cline": {
+    "google/gemini-3-pro-image": { vision: true, imageOutput: false, contextWindow: 1048576, maxOutput: 65536 },
+    "google/gemini-3-pro-image-preview": { vision: true, imageOutput: false, contextWindow: 1048576, maxOutput: 65536 },
+    "google/gemini-3.1-flash-image": { vision: true, imageOutput: false, contextWindow: 1048576, maxOutput: 65536 },
+    "google/gemini-3.1-flash-image-preview": { vision: true, imageOutput: false, contextWindow: 1048576, maxOutput: 65536 },
+  },
   // NVIDIA NIM is OpenAI-compatible → rejects MiniMax/GLM native `thinking` field.
   // Force openai reasoning_effort format for its reasoning models. #issue
   "nvidia": {
@@ -406,6 +424,11 @@ export const PATTERN_CAPABILITIES = [
 
   // ── Gemini (all 2.0+ multimodal + google_search grounding, 1M ctx) ─
   { pattern: "*gemini*image*",  caps: { vision: true, imageOutput: true, contextWindow: 1048576 } },
+  // "Nano Banana" is Gemini 2.5/3 Flash Image under a nickname that carries no
+  // "image" in it, so `*gemini*image*` never matched it and the catalog
+  // advertised a picture model with imageOutput:false. Both spellings occur
+  // upstream: `gemini-nano-banana-2.1` and `nanobanana-*`.
+  { pattern: "*nano-banana*",   caps: { vision: true, imageOutput: true, contextWindow: 1048576 } },
   // Gemini 4 (Argon): no "minimal" tier (400) and no thinkingBudget — LOW/MEDIUM/HIGH only, cannot disable.
   { pattern: "*gemini-4*",      caps: { vision: true, audioInput: true, videoInput: true, reasoning: true, search: true, thinkingFormat: "gemini-level", thinkingCanDisable: false, contextWindow: 1048576, maxOutput: 65536 } },
   { pattern: "*gemini-3.8*",    caps: { vision: true, audioInput: true, videoInput: true, reasoning: true, search: true, thinkingFormat: "gemini-level", thinkingCanDisable: false, contextWindow: 1048576, maxOutput: 65536 } },
