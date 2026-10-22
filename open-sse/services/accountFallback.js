@@ -1,4 +1,4 @@
-import { ERROR_RULES, BACKOFF_CONFIG, TRANSIENT_COOLDOWN_MS } from "../config/errorConfig.js";
+import { ERROR_RULES, BACKOFF_CONFIG, TRANSIENT_COOLDOWN_MS, NO_COOLDOWN_MS } from "../config/errorConfig.js";
 
 /**
  * Calculate exponential backoff cooldown for rate limits (429)
@@ -29,6 +29,10 @@ export function checkFallbackError(status, errorText, backoffLevel = 0, provider
     if (rule.provider && rule.provider !== provider) continue;
     // Text-based rule: match substring in error message
     if (rule.text && lowerError && lowerError.includes(rule.text)) {
+      // noFallback wins over any cooldown/backoff on the same rule: the failure
+      // says nothing about the credential, so switching accounts is pointless
+      // and locking this one would replace the real error with a 503.
+      if (rule.noFallback) return { shouldFallback: false, cooldownMs: NO_COOLDOWN_MS };
       if (rule.backoff) {
         const newLevel = Math.min(backoffLevel + 1, BACKOFF_CONFIG.maxLevel);
         return { shouldFallback: true, cooldownMs: getQuotaCooldown(newLevel), newBackoffLevel: newLevel };
@@ -38,6 +42,7 @@ export function checkFallbackError(status, errorText, backoffLevel = 0, provider
 
     // Status-based rule: match HTTP status code
     if (rule.status && rule.status === status) {
+      if (rule.noFallback) return { shouldFallback: false, cooldownMs: NO_COOLDOWN_MS };
       if (rule.backoff) {
         const newLevel = Math.min(backoffLevel + 1, BACKOFF_CONFIG.maxLevel);
         return { shouldFallback: true, cooldownMs: getQuotaCooldown(newLevel), newBackoffLevel: newLevel };
@@ -57,7 +62,7 @@ export function checkFallbackError(status, errorText, backoffLevel = 0, provider
   // Account-scoped statuses keep their rules above (401/402/403/404/429), and the
   // text rules still win for rate-limit / quota / capacity wording.
   if (status >= 400 && status < 500 && status !== 401 && status !== 402 && status !== 403 && status !== 429) {
-    return { shouldFallback: false, cooldownMs: 0 };
+    return { shouldFallback: false, cooldownMs: NO_COOLDOWN_MS };
   }
 
   // Default: transient cooldown for any unmatched error
@@ -218,12 +223,18 @@ export function applyErrorState(account, status, errorText) {
   if (!account) return account;
 
   const backoffLevel = account.backoffLevel || 0;
-  const { cooldownMs, newBackoffLevel } = checkFallbackError(status, errorText, backoffLevel);
+  const { shouldFallback, cooldownMs, newBackoffLevel } = checkFallbackError(status, errorText, backoffLevel);
+
+  // Same contract as markAccountUnavailable: when the classifier says the
+  // credential is not at fault (shouldFallback false / zero cooldown), record
+  // the error but leave the cooldown and backoff level untouched — otherwise a
+  // "noFallback" rule would still mark the account unavailable downstream.
+  const appliesCooldown = shouldFallback && cooldownMs > 0;
 
   return {
     ...account,
-    rateLimitedUntil: cooldownMs > 0 ? getUnavailableUntil(cooldownMs) : null,
-    backoffLevel: newBackoffLevel ?? backoffLevel,
+    rateLimitedUntil: appliesCooldown ? getUnavailableUntil(cooldownMs) : null,
+    backoffLevel: appliesCooldown ? (newBackoffLevel ?? backoffLevel) : backoffLevel,
     lastError: { status, message: errorText, timestamp: new Date().toISOString() },
     status: "error"
   };

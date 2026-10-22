@@ -1,7 +1,7 @@
 import { getProviderConnections, validateApiKey, updateProviderConnection, getSettings, getProxyPools } from "@/lib/localDb";
 import { resolveConnectionProxyConfig, pickProxyPoolId, isPoolCoolingDown, getPoolCooldownUntil } from "@/lib/network/connectionProxy";
 import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
-import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
+import { MAX_RATE_LIMIT_COOLDOWN_MS, NO_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
 import { resolveProviderId, FREE_PROVIDERS } from "@/shared/constants/providers.js";
 import { getAntigravityQuotaCache, getAntigravityModelQuota } from "./antigravityQuota.js";
@@ -292,9 +292,9 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
     if (isFreeUsageLimit && provider === "opencode") {
       const settings = await getSettings();
       const rotate = (settings.providerStrategies || {})[provider]?.rotateStrategy || "";
-      if (rotate !== "none") return { shouldFallback: true, cooldownMs: 0 };
+      if (rotate !== "none") return { shouldFallback: true, cooldownMs: NO_COOLDOWN_MS };
     }
-    return { shouldFallback: false, cooldownMs: 0 };
+    return { shouldFallback: false, cooldownMs: NO_COOLDOWN_MS };
   }
   const connections = await getProviderConnections({ provider });
   const conn = connections.find(c => c.id === connectionId);
@@ -319,7 +319,12 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
   } else {
     ({ shouldFallback, cooldownMs, newBackoffLevel } = checkFallbackError(status, errorText, backoffLevel, resolveProviderId(provider)));
   }
-  if (!shouldFallback) return { shouldFallback: false, cooldownMs: 0 };
+  // Classifier verdicts that mean "this credential is not at fault" (e.g. the
+  // noFallback "empty response" rule) must not touch the connection record: no
+  // modelLock_*, no "unavailable" testStatus. Writing either would turn one honest
+  // upstream 500 into a 503 "all accounts locked (reset after …)" on the next
+  // request, hiding the model failure behind a fabricated cooldown.
+  if (!shouldFallback || !(cooldownMs > NO_COOLDOWN_MS)) return { shouldFallback: false, cooldownMs: NO_COOLDOWN_MS };
 
   const reason = typeof errorText === "string" ? errorText.slice(0, 200) : "Provider error";
   const lockUpdate = buildModelLockUpdate(githubResetAtMs ? null : model, cooldownMs);

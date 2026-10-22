@@ -38,6 +38,10 @@ export const BACKOFF_CONFIG = {
 // Default cooldown for transient/unknown errors
 export const TRANSIENT_COOLDOWN_MS = 30 * 1000;
 
+// Cooldown value meaning "do not lock this account at all" — used by every
+// shouldFallback:false outcome (request-scoped failures, noFallback rules).
+export const NO_COOLDOWN_MS = 0;
+
 // Hard cap for provider-reported rate limit cooldown (e.g. codex resets_at can be 5-6h)
 export const MAX_RATE_LIMIT_COOLDOWN_MS = 30 * 60 * 1000;
 
@@ -50,15 +54,23 @@ const COOLDOWN = {
 /**
  * Unified error classification rules.
  * Checked top-to-bottom: text rules first (by order), then status rules.
- * Each rule: { text?, status?, cooldownMs?, backoff? }
+ * Each rule: { text?, status?, cooldownMs?, backoff?, noFallback?, provider? }
  *   - text: substring match (case-insensitive) on error message
  *   - status: HTTP status code match
  *   - cooldownMs: fixed cooldown duration
  *   - backoff: true = use exponential backoff (rate limit)
+ *   - noFallback: true = never switch accounts and never lock this one — the
+ *     failure is a property of the model, not of the credential, so another
+ *     account would fail identically and a cooldown only hides the real error
+ *     behind a misleading "503 all accounts locked (reset after 30s)".
+ *   - provider: rule only applies to this provider id
  */
 export const ERROR_RULES = [
   // --- Text-based rules (checked first, order = priority) ---
   { provider: "codex", text: "model is not supported when using codex with a chatgpt account", cooldownMs: MAX_RATE_LIMIT_COOLDOWN_MS },
+  // Upstream model produced nothing (cline image models answer `stream:false`
+  // with a bare 500 "empty response content"). Report it as-is to the client.
+  { text: "empty response",         noFallback: true },
   { text: "no credentials",           cooldownMs: COOLDOWN.long },
   { text: "request not allowed",      cooldownMs: COOLDOWN.short },
   { text: "improperly formed request", cooldownMs: COOLDOWN.long },
