@@ -1,5 +1,5 @@
 import { DefaultExecutor } from "./default.js";
-import { buildCodeBuddyHeaders } from "./codebuddyHeaders.js";
+import { buildCodeBuddyHeaders, codeBuddyChannelVerificationMessage } from "./codebuddyHeaders.js";
 import {
   refreshProviderCredentials,
   shouldRefreshCredentials,
@@ -101,6 +101,16 @@ export class CodeBuddyIntlExecutor extends DefaultExecutor {
             status: 429,
             message: msg || "CodeBuddy frequency limit (6004)",
             resetsAtMs,
+          };
+        }
+        // 11128 is overloaded: it carries both channel verification
+        // ("conversation id missing") and a body-shape fault ("first message is
+        // not system prompt"). Only the former is a header-family problem, so
+        // branch on the message — never on the code alone.
+        if (data?.code === 11128 && /conversation id missing/i.test(msg)) {
+          return {
+            status: 400,
+            message: codeBuddyChannelVerificationMessage(data),
           };
         }
       } catch {}

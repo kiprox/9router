@@ -6,10 +6,50 @@ import { resolveSessionId } from "../utils/sessionManager.js";
  *
  * The gateway expects the conversation id to look like a UUID; deriving it from
  * the session key keeps it identical across turns without any server-side state.
+ *
+ * The version/variant nibbles are set explicitly (RFC 4122 v5 shape): slicing 32
+ * raw hex chars leaves them random, so the result was not a valid UUID — roughly
+ * 15/16 of ids carried a bogus version and 3/4 a bogus variant. Anything that
+ * validates the id shape (a stricter gateway, a proxy, a log parser) would reject
+ * those, so stamp them instead of relying on the hash.
  */
 function uuidV5Like(key) {
-  const hex = createHash("sha256").update(key).digest("hex").slice(0, 32);
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+  const hex = createHash("sha256").update(key).digest("hex");
+  const version = ((parseInt(hex.slice(12, 16), 16) & 0x0fff) | 0x5000).toString(16).padStart(4, "0");
+  const variant = ((parseInt(hex.slice(16, 20), 16) & 0x3fff) | 0x8000).toString(16).padStart(4, "0");
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    version,
+    variant,
+    hex.slice(20, 32),
+  ].join("-");
+}
+
+/**
+ * Read a header case-insensitively.
+ *
+ * HTTP header names are case-insensitive, but a plain-object lookup is not: the
+ * previous `headers["x-conversation-id"] || headers["X-Conversation-ID"]` check
+ * missed every other spelling (`X-Conversation-Id`, `x-Conversation-ID`), so a
+ * client that sent one of those had its conversation affinity silently replaced
+ * by a derived id — new conversation every turn, cold prompt cache.
+ *
+ * Also accepts a fetch `Headers` instance (its get() is already
+ * case-insensitive), and treats a blank/whitespace value as absent: an empty
+ * header is not a conversation id, and forwarding "   " upstream is worse than
+ * deriving one.
+ */
+function readHeader(headers, name) {
+  if (!headers || typeof headers !== "object") return null;
+  if (typeof headers.get === "function") {
+    const value = headers.get(name);
+    return typeof value === "string" && value.trim() ? value.trim() : null;
+  }
+  const key = Object.keys(headers).find((k) => k.toLowerCase() === name.toLowerCase());
+  if (!key) return null;
+  const value = headers[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 /**
@@ -97,20 +137,21 @@ export function buildCodeBuddyHeaders({ domain, credentials, body, headers: buil
   headers["X-Agent-Intent"] = "craft";
 
   // Mirror the UA version instead of hardcoding it (see versionFromUserAgent).
-  const userAgent = builtHeaders?.["User-Agent"] || builtHeaders?.["user-agent"] || credentials?.rawHeaders?.["user-agent"];
+  const userAgent =
+    readHeader(builtHeaders, "User-Agent") || readHeader(credentials?.rawHeaders, "User-Agent");
   const version = versionFromUserAgent(userAgent);
   if (version) headers["X-IDE-Version"] = version;
 
   // Conversation family: reuse the caller's affinity when present so prompt
   // cache stays warm across turns; otherwise derive a stable id for this
-  // conversation (fixes 11128).
+  // conversation (fixes 11128). Both header bags are read case-insensitively —
+  // see readHeader.
   const incoming = credentials?.rawHeaders || {};
   const incomingConv =
-    incoming["x-conversation-id"] || incoming["X-Conversation-ID"] ||
-    builtHeaders?.["X-Conversation-ID"] || builtHeaders?.["x-conversation-id"] || null;
+    readHeader(incoming, "X-Conversation-ID") || readHeader(builtHeaders, "X-Conversation-ID");
   const bodyConv =
-    body && typeof body === "object" && typeof body.conversation_id === "string"
-      ? body.conversation_id
+    body && typeof body === "object" && typeof body.conversation_id === "string" && body.conversation_id.trim()
+      ? body.conversation_id.trim()
       : null;
   // A fresh UUID per request makes every turn look like a brand-new conversation,
   // which is exactly the pattern the gateway's abuse heuristic keys on. Reuse one
@@ -162,6 +203,28 @@ export function buildCodeBuddyHeaders({ domain, credentials, body, headers: buil
   }
 
   return headers;
+}
+
+/**
+ * Human-readable message for the 11128 "conversation id missing" variant.
+ *
+ * The raw gateway envelope names no cause, so this used to surface as an opaque
+ * 400 nobody could act on. 11128 is overloaded (it also carries "first message is
+ * not system prompt", a body-shape fault), so callers must match the message —
+ * never the code alone — before using this.
+ *
+ * @param {object} data - parsed upstream envelope ({ displayTips, displayMsg })
+ */
+export function codeBuddyChannelVerificationMessage(data) {
+  const tip = data?.displayTips?.en || data?.displayMsg?.en || "";
+  return (
+    'CodeBuddy channel verification failed (11128 "conversation id missing"): the upstream gateway '
+    + "requires the X-Conversation-* header family the official IDE sends. "
+    + "buildCodeBuddyHeaders() supplies it — if this appears, the gate likely changed shape "
+    + "(e.g. a newly required header) and that family in "
+    + "open-sse/executors/codebuddyHeaders.js needs re-measuring against the live gateway."
+    + (tip ? ` Upstream said: ${tip}` : "")
+  );
 }
 
 export default buildCodeBuddyHeaders;

@@ -10,6 +10,8 @@ import { CodeBuddyIntlExecutor } from "../../open-sse/executors/codebuddy-intl.j
 const UA_CN = "CLI/2.108.1 CodeBuddy/2.108.1";
 const UA_INTL = "IDE/2.108.1 CodeBuddy/2.108.1";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 const build = (overrides = {}) =>
   buildCodeBuddyHeaders({
     domain: "copilot.tencent.com",
@@ -58,9 +60,7 @@ describe("CodeBuddy headers: conversation affinity", () => {
   });
 
   it("mints a UUID-shaped id", () => {
-    expect(build()["X-Conversation-ID"]).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-    );
+    expect(build()["X-Conversation-ID"]).toMatch(UUID_RE);
   });
 
   it("still mints a fresh per-request id for the request/message headers", () => {
@@ -79,5 +79,62 @@ describe("CodeBuddy executors wire the UA into the version header", () => {
     const headers = executor.buildHeaders({ accessToken: "ck_test", connectionId: "conn-1" }, true, "https://example.test", "glm-5.2", { messages: [] });
     expect(headers["User-Agent"]).toBe(ua);
     expect(headers["X-IDE-Version"]).toBe("2.108.1");
+  });
+});
+
+describe("CodeBuddy headers: caller header spelling", () => {
+  // HTTP header names are case-insensitive. An exact-key lookup missed every
+  // spelling but two, so the caller's conversation affinity was replaced by a
+  // derived id — a new conversation every turn, and a cold prompt cache.
+  it.each([
+    "x-conversation-id",
+    "X-Conversation-ID",
+    "X-Conversation-Id",
+    "x-Conversation-ID",
+    "X-CONVERSATION-ID",
+  ])("keeps the caller's id when sent as %s", (name) => {
+    const headers = build({ credentials: { connectionId: "conn-1", rawHeaders: { [name]: "client-conv" } } });
+    expect(headers["X-Conversation-ID"]).toBe("client-conv");
+  });
+
+  it.each(["   ", "", "\t\n"])("treats a blank caller id (%j) as absent", (blank) => {
+    const headers = build({ credentials: { connectionId: "conn-1", rawHeaders: { "x-conversation-id": blank } } });
+    // Falls back to the derived id rather than forwarding whitespace upstream.
+    expect(headers["X-Conversation-ID"]).not.toBe(blank);
+    expect(headers["X-Conversation-ID"]).toMatch(UUID_RE);
+  });
+
+  it("reads the UA case-insensitively too", () => {
+    const headers = buildCodeBuddyHeaders({
+      domain: "www.codebuddy.ai",
+      credentials: { connectionId: "conn-1" },
+      body: { messages: [] },
+      headers: { "user-agent": "IDE/3.4.5 CodeBuddy/3.4.5" },
+    });
+    expect(headers["X-IDE-Version"]).toBe("3.4.5");
+  });
+});
+
+describe("CodeBuddy headers: derived conversation id shape", () => {
+  // The id is a UUID per RFC 4122, so the version nibble must be 5 and the
+  // variant nibble one of 8/9/a/b. Slicing 32 raw hash chars left both random.
+  it("sets the RFC-4122 v5 version nibble", () => {
+    for (let i = 0; i < 50; i++) {
+      const id = build({ credentials: { connectionId: `conn-${i}` } })["X-Conversation-ID"];
+      expect(id[14]).toBe("5");
+    }
+  });
+
+  it("sets the RFC-4122 variant nibble", () => {
+    for (let i = 0; i < 50; i++) {
+      const id = build({ credentials: { connectionId: `conn-${i}` } })["X-Conversation-ID"];
+      expect("89ab").toContain(id[19]);
+    }
+  });
+
+  it("stays deterministic for the same session", () => {
+    const first = build({ credentials: { connectionId: "stable" } })["X-Conversation-ID"];
+    const second = build({ credentials: { connectionId: "stable" } })["X-Conversation-ID"];
+    expect(first).toBe(second);
   });
 });
