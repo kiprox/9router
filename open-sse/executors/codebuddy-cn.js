@@ -82,6 +82,16 @@ export class CodeBuddyExecutor extends DefaultExecutor {
       try {
         const data = JSON.parse(bodyText);
         const msg = data?.msg || data?.message || data?.error?.message || "";
+        // 11140 = account-level restriction (see codebuddy-intl.js). Surface the
+        // human-readable text so classification can park the connection instead
+        // of retrying a flagged account on the short backoff ladder.
+        const restrictedText = data?.displayMsg?.en || data?.displayMsg?.id || "";
+        if (data?.code === 11140 || /account has been restricted|account restricted|账号.*限制/i.test(restrictedText)) {
+          return {
+            status: 403,
+            message: restrictedText || msg || "Account restricted",
+          };
+        }
         if (data?.code === 6004 || /超出频率限制|frequency limit|限额/i.test(msg)) {
           let resetsAtMs = null;
           const match = msg.match(/(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})(?:\s*UTC\+?([0-9:]+))?/i);

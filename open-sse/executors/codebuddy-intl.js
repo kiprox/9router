@@ -55,6 +55,19 @@ export class CodeBuddyIntlExecutor extends DefaultExecutor {
       try {
         const data = JSON.parse(bodyText);
         const msg = data?.msg || data?.message || data?.error?.message || "";
+        // 11140 = the ACCOUNT is flagged ("Your account has been restricted due
+        // to unusual activity"), unlike 11128 which is a per-request channel
+        // check. Surface the human-readable displayMsg so error classification
+        // can park the connection for hours instead of re-probing it every few
+        // seconds, and report it as 403 so clients see an auth-style refusal
+        // rather than a malformed request.
+        const restrictedText = data?.displayMsg?.en || data?.displayMsg?.id || "";
+        if (data?.code === 11140 || /account has been restricted|account restricted/i.test(restrictedText)) {
+          return {
+            status: 403,
+            message: restrictedText || msg || "Account restricted",
+          };
+        }
         if (data?.code === 6004 || /超出频率限制|frequency limit|限额/i.test(msg)) {
           let resetsAtMs = null;
           const match = msg.match(/(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})(?:\s*UTC\+?([0-9:]+))?/i);

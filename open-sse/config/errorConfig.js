@@ -52,6 +52,24 @@ const COOLDOWN = {
 };
 
 /**
+ * Account-restriction cooldown.
+ *
+ * CodeBuddy answers HTTP 403 `code 11140 "request illegal"` with
+ * displayMsg "Your account has been restricted due to unusual activity" once it
+ * has flagged the ACCOUNT — not the request. Unlike 11128 (a channel-verification
+ * miss that a header fix can clear), this verdict is stored server-side and does
+ * not change when the client behaves differently.
+ *
+ * Retrying it on the short exponential ladder is actively harmful: the generic
+ * "request illegal" rule starts at 2s, so a restricted connection is re-probed
+ * every few seconds, and each probe re-confirms to the gateway that the account
+ * is still active. Park the connection for a long window instead, so a human can
+ * review it. Deliberately NOT a per-model lock: the restriction covers the whole
+ * account, so every model behind it is dead too.
+ */
+export const ACCOUNT_RESTRICTED_COOLDOWN_MS = 12 * 60 * 60 * 1000;
+
+/**
  * Unified error classification rules.
  * Checked top-to-bottom: text rules first (by order), then status rules.
  * Each rule: { text?, status?, cooldownMs?, backoff?, noFallback?, provider? }
@@ -68,6 +86,12 @@ const COOLDOWN = {
 export const ERROR_RULES = [
   // --- Text-based rules (checked first, order = priority) ---
   { provider: "codex", text: "model is not supported when using codex with a chatgpt account", cooldownMs: MAX_RATE_LIMIT_COOLDOWN_MS },
+  // Account flagged by the provider, not a bad request (CodeBuddy 403/11140
+  // "Your account has been restricted due to unusual activity"). Must sit above
+  // the provider's generic "request illegal" backoff rule, which would otherwise
+  // re-probe the restricted account every couple of seconds.
+  { text: "account has been restricted", cooldownMs: ACCOUNT_RESTRICTED_COOLDOWN_MS },
+  { text: "account restricted",          cooldownMs: ACCOUNT_RESTRICTED_COOLDOWN_MS },
   // Upstream model produced nothing (cline image models answer `stream:false`
   // with a bare 500 "empty response content"). Report it as-is to the client.
   { text: "empty response",         noFallback: true },
