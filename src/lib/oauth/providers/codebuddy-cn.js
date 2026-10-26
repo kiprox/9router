@@ -1,4 +1,5 @@
 import { CODEBUDDY_CONFIG } from "../constants/oauth.js";
+import { getJwtExpiresInSeconds } from "../providerHelpers.js";
 
 // CodeBuddy (Tencent) - Browser OAuth Polling Flow
 // 1. POST stateUrl → get { state, authUrl }
@@ -72,7 +73,10 @@ const codebuddyCn = {
   mapTokens: (tokens) => ({
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token,
-    expiresIn: tokens.expires_in || 86400,
+    // CodeBuddy does not return expires_in — derive the lifetime from the JWT
+    // `exp` claim so proactive refresh fires at the real expiry (see
+    // getJwtExpiresInSeconds). 24h remains the last-resort fallback.
+    expiresIn: tokens.expires_in || getJwtExpiresInSeconds(tokens.access_token) || 86400,
     providerSpecificData: {},
   }),
 };

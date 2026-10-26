@@ -1,5 +1,9 @@
 import { DefaultExecutor } from "./default.js";
 import { buildCodeBuddyHeaders } from "./codebuddyHeaders.js";
+import {
+  refreshProviderCredentials,
+  shouldRefreshCredentials,
+} from "../services/oauthCredentialManager.js";
 
 /**
  * CodeBuddyExecutor — talks to https://copilot.tencent.com/v2/chat/completions
@@ -77,6 +81,20 @@ export class CodeBuddyExecutor extends DefaultExecutor {
     );
     return headers;
   }
+
+  // Reactive refresh: chatCore calls this on 401/403 and replays the request.
+  // Without the override CodeBuddy inherited DefaultExecutor's refresher map,
+  // which has no CodeBuddy entry — so an expired/revoked access token could
+  // never be recovered and the connection stayed dead until a manual re-login.
+  async refreshCredentials(credentials, log, proxyOptions = null) {
+    if (!credentials?.refreshToken) return null;
+    return refreshProviderCredentials("codebuddy-cn", credentials, log);
+  }
+
+  needsRefresh(credentials) {
+    return shouldRefreshCredentials("codebuddy-cn", credentials);
+  }
+
   parseError(response, bodyText) {
     if (bodyText) {
       try {

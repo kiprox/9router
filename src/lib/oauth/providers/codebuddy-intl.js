@@ -1,4 +1,5 @@
 import { CODEBUDDY_INTL_CONFIG } from "../constants/oauth.js";
+import { getJwtExpiresInSeconds } from "../providerHelpers.js";
 
 // CodeBuddy International — mirrors codebuddy-cn flow against the .ai domain.
 const codebuddyIntl = {
@@ -66,7 +67,10 @@ const codebuddyIntl = {
   mapTokens: (tokens) => ({
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token,
-    expiresIn: tokens.expires_in || 86400,
+    // Same JWT-`exp` derivation as codebuddy-cn: the .ai gateway also omits
+    // expires_in, so a fixed 24h guess would either churn the refresh token or
+    // miss the real expiry.
+    expiresIn: tokens.expires_in || getJwtExpiresInSeconds(tokens.access_token) || 86400,
     providerSpecificData: {},
   }),
 };

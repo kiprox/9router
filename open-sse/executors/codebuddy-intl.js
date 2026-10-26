@@ -1,5 +1,9 @@
 import { DefaultExecutor } from "./default.js";
 import { buildCodeBuddyHeaders } from "./codebuddyHeaders.js";
+import {
+  refreshProviderCredentials,
+  shouldRefreshCredentials,
+} from "../services/oauthCredentialManager.js";
 
 /**
  * CodeBuddyIntlExecutor — talks to https://www.codebuddy.ai/v2/chat/completions
@@ -50,6 +54,19 @@ export class CodeBuddyIntlExecutor extends DefaultExecutor {
     );
     return headers;
   }
+
+  // Reactive refresh: same gap/behaviour as codebuddy-cn (see that file) — the
+  // inherited DefaultExecutor refresher map has no CodeBuddy entry, so 401/403
+  // must be handled here or the connection never recovers after token expiry.
+  async refreshCredentials(credentials, log, proxyOptions = null) {
+    if (!credentials?.refreshToken) return null;
+    return refreshProviderCredentials("codebuddy-intl", credentials, log);
+  }
+
+  needsRefresh(credentials) {
+    return shouldRefreshCredentials("codebuddy-intl", credentials);
+  }
+
   parseError(response, bodyText) {
     if (bodyText) {
       try {

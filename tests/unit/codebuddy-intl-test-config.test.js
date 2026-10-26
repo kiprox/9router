@@ -28,12 +28,17 @@ describe("OAUTH_TEST_CONFIG — codebuddy-intl (#4232)", () => {
     expect(src).toContain('"codebuddy-intl"');
   });
 
-  it('"codebuddy-intl" has tokenExists: true', () => {
-    // Match the specific entry: "codebuddy-intl": { tokenExists: true }
-    expect(src).toMatch(/"codebuddy-intl"\s*:\s*\{\s*tokenExists\s*:\s*true\s*\}/);
+  it('"codebuddy-intl" has tokenExists: true and refreshable: true', () => {
+    // tokenExists skips the probe (no cheap endpoint); refreshable lets an
+    // expired pair rotate instead of being reported "valid" until the next 401.
+    expect(src).toMatch(
+      /"codebuddy-intl"\s*:\s*\{\s*tokenExists\s*:\s*true\s*,\s*refreshable\s*:\s*true\s*\}/
+    );
   });
 
-  it('"codebuddy-cn" still has tokenExists: true (regression guard)', () => {
-    expect(src).toMatch(/"codebuddy-cn"\s*:\s*\{\s*tokenExists\s*:\s*true\s*\}/);
+  it('"codebuddy-cn" still has tokenExists + refreshable (regression guard)', () => {
+    expect(src).toMatch(
+      /"codebuddy-cn"\s*:\s*\{\s*tokenExists\s*:\s*true\s*,\s*refreshable\s*:\s*true\s*\}/
+    );
   });
 });

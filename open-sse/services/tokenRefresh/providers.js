@@ -3,6 +3,18 @@ import { OAUTH_ENDPOINTS, GITHUB_COPILOT, buildKimiHeaders } from "../../config/
 import { proxyAwareFetch } from "../../utils/proxyFetch.js";
 import { dedupRefresh } from "./dedup.js";
 import { buildExternalIdpRefreshParams } from "../../../src/lib/oauth/kiroExternalIdp.js";
+import { getJwtExpiresInSeconds } from "../../../src/lib/oauth/providerHelpers.js";
+
+// CodeBuddy omits expires_in on both grant types; derive it from the JWT exp so
+// the persisted expiresAt is real and proactive refresh stops being blind.
+const CODEBUDDY_FALLBACK_EXPIRES_IN = 86400;
+function codebuddyExpiresIn(data) {
+  return (
+    data?.expiresIn ||
+    getJwtExpiresInSeconds(data?.accessToken) ||
+    CODEBUDDY_FALLBACK_EXPIRES_IN
+  );
+}
 
 let _xaiServiceSingleton = null;
 export async function refreshXaiToken(refreshToken, log) {
@@ -558,7 +570,7 @@ export async function refreshCodebuddyToken(refreshToken, log) {
     return {
       accessToken: data.data.accessToken,
       refreshToken: data.data.refreshToken || refreshToken,
-      expiresIn: data.data.expiresIn,
+      expiresIn: codebuddyExpiresIn(data.data),
     };
   }, log);
 }
@@ -609,7 +621,7 @@ export async function refreshCodebuddyIntlToken(refreshToken, log) {
     return {
       accessToken: data.data.accessToken,
       refreshToken: data.data.refreshToken || refreshToken,
-      expiresIn: data.data.expiresIn,
+      expiresIn: codebuddyExpiresIn(data.data),
     };
   }, log);
 }

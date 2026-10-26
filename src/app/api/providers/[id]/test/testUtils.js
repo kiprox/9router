@@ -113,10 +113,10 @@ const OAUTH_TEST_CONFIG = {
     authHeader: "Authorization",
     authPrefix: "Bearer ",
   },
-  "codebuddy-cn": { tokenExists: true },
+  "codebuddy-cn": { tokenExists: true, refreshable: true },
   // codebuddy-intl uses the same JWT token structure as codebuddy-cn
   // (access + refresh token pair, ~1-year expiry) — same test strategy (#4232).
-  "codebuddy-intl": { tokenExists: true },
+  "codebuddy-intl": { tokenExists: true, refreshable: true },
   kimchi: {
     url: KIMCHI_CONFIG.validationUrl || "https://api.cast.ai/v1/llm/openai/supported-providers",
     method: "GET",
@@ -292,6 +292,13 @@ async function refreshOAuthToken(connection) {
       return await refreshProviderCredentials(provider, connection, console);
     }
 
+    // CodeBuddy (CN + intl): the plugin refresh endpoint expects the refresh
+    // token in the X-Refresh-Token header, so it must go through the
+    // centralized handler rather than a generic grant.
+    if (provider === "codebuddy-cn" || provider === "codebuddy-intl") {
+      return await refreshProviderCredentials(provider, connection, console);
+    }
+
     if (provider === "claude") {
       const response = await fetch(CLAUDE_CONFIG.tokenUrl, {
         method: "POST",
@@ -372,8 +379,18 @@ async function testOAuthConnection(connection, effectiveProxy = null) {
   if (!config) return { valid: false, error: "Provider test not supported", refreshed: false };
   if (!connection.accessToken) return { valid: false, error: "No access token", refreshed: false };
 
-  // Cursor uses protobuf API - can only verify token exists, not test endpoint
+  // Cursor/CodeBuddy: no cheap auth probe, so the test only verifies the token
+  // exists. Refreshable providers still rotate the pair when the stored expiry
+  // has passed — otherwise the connection would be reported "valid" right up
+  // until the next request 401s with no way back.
   if (config.tokenExists) {
+    if (config.refreshable && connection.refreshToken && isTokenExpired(connection)) {
+      const tokens = await refreshOAuthToken(connection);
+      if (tokens?.accessToken) {
+        return { valid: true, error: null, refreshed: true, newTokens: tokens };
+      }
+      return { valid: false, error: "Token expired and refresh failed", refreshed: false };
+    }
     return { valid: true, error: null, refreshed: false, newTokens: null };
   }
 

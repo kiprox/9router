@@ -50,6 +50,24 @@ function extractEmailFromAccessToken(accessToken) {
   return payload.email || payload.preferred_username || payload.sub || undefined;
 }
 
+/**
+ * Remaining lifetime of a JWT access token in seconds, derived from its `exp`
+ * claim. Returns null when the token is not a JWT or carries no usable expiry.
+ *
+ * CodeBuddy's OAuth token response omits `expires_in` (it returns a plain JWT
+ * access token + refresh token), so the token itself is the only source of
+ * truth for the access-token lifetime. Without this the gateway either guessed
+ * a fixed 24h window or never refreshed at all — which is why CodeBuddy
+ * connections died on 401 with no recovery.
+ */
+export function getJwtExpiresInSeconds(accessToken) {
+  const payload = decodeJwtPayload(accessToken);
+  const exp = Number(payload?.exp);
+  if (!Number.isFinite(exp) || exp <= 0) return null;
+  const remaining = Math.floor(exp - Date.now() / 1000);
+  return remaining > 0 ? remaining : null;
+}
+
 export async function fetchKiroProfileArn(accessToken) {
   if (!accessToken) return null;
   try {
