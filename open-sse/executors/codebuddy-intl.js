@@ -46,7 +46,7 @@ export class CodeBuddyIntlExecutor extends DefaultExecutor {
     // Same 11128 channel-verification enforcement as CN (see codebuddy-cn.js).
     Object.assign(
       headers,
-      buildCodeBuddyHeaders({ domain: "www.codebuddy.ai", credentials, body })
+      buildCodeBuddyHeaders({ domain: "www.codebuddy.ai", credentials, body, headers })
     );
     return headers;
   }

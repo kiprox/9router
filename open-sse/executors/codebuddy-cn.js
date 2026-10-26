@@ -73,7 +73,7 @@ export class CodeBuddyExecutor extends DefaultExecutor {
     // conversation family + identity headers (see codebuddyHeaders.js).
     Object.assign(
       headers,
-      buildCodeBuddyHeaders({ domain: "copilot.tencent.com", credentials, body })
+      buildCodeBuddyHeaders({ domain: "copilot.tencent.com", credentials, body, headers })
     );
     return headers;
   }

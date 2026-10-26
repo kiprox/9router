@@ -1,4 +1,16 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
+import { resolveSessionId } from "../utils/sessionManager.js";
+
+/**
+ * Deterministic UUID-shaped id for a stable string key.
+ *
+ * The gateway expects the conversation id to look like a UUID; deriving it from
+ * the session key keeps it identical across turns without any server-side state.
+ */
+function uuidV5Like(key) {
+  const hex = createHash("sha256").update(key).digest("hex").slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
 
 /**
  * CodeBuddy channel-verification headers.
@@ -57,32 +69,63 @@ function pickFirst(...values) {
 }
 
 /**
+ * Derive the client version from the User-Agent the request actually sends
+ * (`CLI/2.108.1 CodeBuddy/2.108.1` → `2.108.1`).
+ *
+ * X-IDE-Version must agree with the UA: the gateway cross-checks the two, so a
+ * hardcoded copy silently goes stale the moment the registry UA is bumped and
+ * every request then fails channel verification (11128 "request illegal").
+ */
+function versionFromUserAgent(userAgent) {
+  if (typeof userAgent !== "string") return null;
+  const match = userAgent.match(/CodeBuddy\/([0-9][0-9.]*)/) || userAgent.match(/\/([0-9][0-9.]*)/);
+  return match ? match[1] : null;
+}
+
+/**
  * Build the official-client headers for one chat request.
  * @param {object} opts
  * @param {string} opts.domain - "copilot.tencent.com" (CN) or "www.codebuddy.ai" (intl)
  * @param {object} opts.credentials - executor credentials ({ accessToken, apiKey, rawHeaders, providerSpecificData })
  * @param {object} [opts.body] - transformed OpenAI body (for conversation affinity via body.conversation_id)
+ * @param {object} [opts.headers] - headers already built by the executor (source of UA + X-Conversation-ID)
  */
-export function buildCodeBuddyHeaders({ domain, credentials, body }) {
+export function buildCodeBuddyHeaders({ domain, credentials, body, headers: builtHeaders = null }) {
   const headers = {};
 
   if (domain) headers["X-Domain"] = domain;
   headers["X-Agent-Intent"] = "craft";
 
-  // X-IDE-Version must match the registry User-Agent (<Product>/<Version>).
-  // CN sends "CLI/2.108.1", intl sends "IDE/2.108.1" — both are 2.108.1.
-  headers["X-IDE-Version"] = "2.108.1";
+  // Mirror the UA version instead of hardcoding it (see versionFromUserAgent).
+  const userAgent = builtHeaders?.["User-Agent"] || builtHeaders?.["user-agent"] || credentials?.rawHeaders?.["user-agent"];
+  const version = versionFromUserAgent(userAgent);
+  if (version) headers["X-IDE-Version"] = version;
 
   // Conversation family: reuse the caller's affinity when present so prompt
-  // cache stays warm across turns; otherwise mint fresh ids (fixes 11128).
+  // cache stays warm across turns; otherwise derive a stable id for this
+  // conversation (fixes 11128).
   const incoming = credentials?.rawHeaders || {};
   const incomingConv =
-    incoming["x-conversation-id"] || incoming["X-Conversation-ID"] || null;
+    incoming["x-conversation-id"] || incoming["X-Conversation-ID"] ||
+    builtHeaders?.["X-Conversation-ID"] || builtHeaders?.["x-conversation-id"] || null;
   const bodyConv =
     body && typeof body === "object" && typeof body.conversation_id === "string"
       ? body.conversation_id
       : null;
-  headers["X-Conversation-ID"] = incomingConv || bodyConv || randomUUID();
+  // A fresh UUID per request makes every turn look like a brand-new conversation,
+  // which is exactly the pattern the gateway's abuse heuristic keys on. Reuse one
+  // id for the whole session instead; fall back to a random id only when no
+  // session signal exists at all.
+  let sessionConv = null;
+  if (!incomingConv && !bodyConv) {
+    try {
+      const sessionId = resolveSessionId({ headers: incoming, body, connectionId: credentials?.connectionId, scope: "codebuddy" });
+      sessionConv = sessionId ? uuidV5Like(`codebuddy:${sessionId}`) : null;
+    } catch {
+      sessionConv = null;
+    }
+  }
+  headers["X-Conversation-ID"] = incomingConv || bodyConv || sessionConv || randomUUID();
   headers["X-Conversation-Request-ID"] = hex16();
   headers["X-Conversation-Message-ID"] = randomUUID().replace(/-/g, "");
   headers["X-Request-ID"] = randomUUID().replace(/-/g, "");
