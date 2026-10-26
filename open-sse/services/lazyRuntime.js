@@ -45,14 +45,55 @@ function getRuntimeDir() {
   return path.join(getWritableDataDir(), "runtime");
 }
 
+// npm resolves the project root by walking UP from cwd until it finds a
+// package.json. DATA_DIR (/app/data) sits inside the app tree, so without its
+// own package.json the runtime dir inherits /app/package.json: npm installs
+// into /app/node_modules and rewrites the app's dependencies. In the Docker
+// image /app is root-owned while the server runs as `node`, which surfaced as
+// "EACCES: mkdir '/app/node_modules'" and left the optional dep uninstallable.
+function ensureRuntimeProject() {
+  const dir = getRuntimeDir();
+  fs.mkdirSync(dir, { recursive: true });
+  const pkgPath = path.join(dir, "package.json");
+  if (!fs.existsSync(pkgPath)) {
+    fs.writeFileSync(pkgPath, JSON.stringify({
+      name: "9router-runtime",
+      version: "1.0.0",
+      private: true,
+      description: "User-writable runtime deps (playwright-core, wreq-js) installed on demand",
+    }, null, 2));
+  }
+  return dir;
+}
+
 function isModuleMissing(error) {
   const code = String(error?.code || "");
   return code === "MODULE_NOT_FOUND" || code === "ERR_MODULE_NOT_FOUND";
 }
 
+// npm 7+ prints `npm ERR!`, npm 11+ switched to `npm error`. The old regex only
+// matched the former, so on modern npm every failure fell through to "the last
+// line", which is the debug-log pointer — the real cause (EACCES, ENOTFOUND,
+// ETARGET) was thrown away. Skip that pointer and surface the first meaningful
+// diagnostic instead.
+function summarizeNpmError(stderr = "") {
+  const lines = String(stderr)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    // `npm error A complete log of this run can be found in:` carries no cause.
+    .filter((line) => !/A complete log of this run/i.test(line))
+    .map((line) => line.replace(/^npm (?:ERR!|error)\s*/, "").trim())
+    .filter(Boolean);
+  if (!lines.length) return "unknown npm error";
+  // `code EACCES` / `Error: EACCES ...` is the most useful single line.
+  const codeLine = lines.find((line) => /^(code|errno)\s+[A-Z_-]+/i.test(line));
+  const errorLine = lines.find((line) => /^Error:\s/.test(line));
+  return String(codeLine || errorLine || lines[0]).slice(0, 200);
+}
+
 function npmInstall(pkg, version) {
-  const cwd = getRuntimeDir();
-  fs.mkdirSync(cwd, { recursive: true });
+  const cwd = ensureRuntimeProject();
   const npm = process.platform === "win32" ? "npm.cmd" : "npm";
   const args = ["install", "--no-audit", "--no-fund", "--prefer-online", `${pkg}@${version}`];
   return new Promise((resolve) => {
@@ -82,12 +123,11 @@ async function load(pkg) {
   }
   // 3) Download on demand, then import from the runtime dir.
   const version = LAZY_DEP_VERSIONS[pkg] || "latest";
-  const dir = getRuntimeDir();
+  const dir = ensureRuntimeProject();
   const res = await npmInstall(pkg, version);
   if (!res.ok) {
-    const reason = (res.stderr.match(/npm ERR! ?(.+)/) || [])[1] || res.stderr.split("\n").filter(Boolean).pop() || "unknown npm error";
     throw new Error(
-      `${pkg} is missing and the on-demand install failed (${String(reason).slice(0, 160)}) — ` +
+      `${pkg} is missing and the on-demand install failed (${summarizeNpmError(res.stderr)}) — ` +
       `install it manually: cd "${dir}" && npm install ${pkg}@${version}`
     );
   }
