@@ -77,15 +77,33 @@ export function resetOpencodeTlsSession() {
  *
  * Streaming is preserved: the response body is handed over as the live
  * ReadableStream, never buffered.
+ *
+ * Fails open: when wreq-js cannot be loaded the request is replayed on native
+ * fetch, which is what the executor's `directFetch` contract promises. The
+ * impersonated handshake is what unlocks the free tier, so the replay is still
+ * subject to the TLS gate (usually 429) — but a missing optional dep must not
+ * turn a working provider into a hard error.
  */
 export async function opencodeTlsFetch(url, init = {}, { signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   let session;
   try {
     session = await loadSession();
   } catch (error) {
-    throw new OpencodeTlsUnavailableError(
-      `wreq-js unavailable (${error instanceof Error ? error.message : "unknown"}) — install the optional wreq-js dependency to reach the OpenCode free tier`
+    const reason = error instanceof Error ? error.message : "unknown";
+    const unavailable = new OpencodeTlsUnavailableError(
+      `wreq-js unavailable (${reason}) — install the optional wreq-js dependency to reach the OpenCode free tier`
     );
+    console.warn(`[OpenCodeTLS] ${unavailable.message} — retrying on native fetch`);
+    // Replay the same request on the native transport. `init` carries no
+    // `directFetch` key, so the patched global fetch resolves proxies and falls
+    // through to the real fetch instead of re-entering this adapter.
+    const replay = { ...init };
+    if (signal && !replay.signal) replay.signal = signal;
+    try {
+      return await fetch(url, replay);
+    } catch (fetchError) {
+      throw Object.assign(unavailable, { cause: fetchError });
+    }
   }
 
   const options = {

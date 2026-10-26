@@ -7,11 +7,24 @@
 //
 // Never throws at import time of THIS module — failures surface from
 // loadRuntimeDep() with a manual-install hint.
+//
+// Webpack hardening (both needed, the bundler rewrites the obvious forms):
+//   - `createRequire(...)` called directly is statically rewritten by
+//     CommonJsImportsParserPlugin into `/* createRequire() */ undefined`
+//     because its argument is computed, so every resolve() threw
+//     "Cannot read properties of undefined (reading 'resolve')" in the
+//     standalone/Docker build while dev worked. Pulling the function off the
+//     `node:module` default binding leaves a plain member expression webpack
+//     does not touch.
+//   - `import(<computed>)` becomes a webpackEmptyAsyncContext that always
+//     throws MODULE_NOT_FOUND, so runtime-dir loads could never succeed.
+//     Funnel it through one `webpackIgnore` helper so the specifier stays a
+//     real runtime import.
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { createRequire } from "node:module";
+import nodeModule from "node:module";
 import { pathToFileURL } from "node:url";
 import { getWritableDataDir } from "../utils/writableDataDir.js";
 
@@ -20,6 +33,13 @@ const LAZY_DEP_VERSIONS = {
   "playwright-core": "^1.62.1",
   "wreq-js": "^3.2.0",
 };
+
+// Member expression off the builtin's default export: not rewritten by webpack.
+const createRequire = nodeModule.createRequire;
+
+// Real runtime import (specifier is only known at call time). Keeping this in
+// one place stops the bundler from turning it into an empty async context.
+const runtimeImport = (specifier) => import(/* webpackIgnore: true */ specifier);
 
 function getRuntimeDir() {
   return path.join(getWritableDataDir(), "runtime");
@@ -49,14 +69,14 @@ const inflight = new Map();
 async function load(pkg) {
   // 1) Resolvable from the app install (dev machine / traced standalone).
   try {
-    return await import(/* webpackIgnore: true */ pkg);
+    return await runtimeImport(pkg);
   } catch (error) {
     if (!isModuleMissing(error)) throw error;
   }
   // 2) Already present in the runtime dir from a previous install.
   const runtimeRequire = createRequire(path.join(getRuntimeDir(), "package.json"));
   try {
-    return await import(pathToFileURL(runtimeRequire.resolve(pkg)).href);
+    return await runtimeImport(pathToFileURL(runtimeRequire.resolve(pkg)).href);
   } catch (error) {
     if (!isModuleMissing(error)) throw error;
   }
@@ -71,7 +91,7 @@ async function load(pkg) {
       `install it manually: cd "${dir}" && npm install ${pkg}@${version}`
     );
   }
-  return import(pathToFileURL(createRequire(path.join(dir, "package.json")).resolve(pkg)).href);
+  return runtimeImport(pathToFileURL(createRequire(path.join(dir, "package.json")).resolve(pkg)).href);
 }
 
 export function loadRuntimeDep(pkg) {

@@ -63,8 +63,31 @@ describe("opencodeTlsClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("surfaces an actionable error when wreq-js is unavailable", async () => {
+  it("fails open to native fetch when wreq-js is unavailable", async () => {
     loadRuntimeDepMock.mockRejectedValue(new Error("MODULE_NOT_FOUND"));
+    const nativeResponse = new Response("native", { status: 200 });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(nativeResponse);
+
+    const { opencodeTlsFetch } = await import("../../open-sse/services/opencodeTlsClient.js");
+    const result = await opencodeTlsFetch("https://opencode.ai/a", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+
+    // The optional dep must never turn a provider into a hard error; the replay
+    // keeps method/headers/body so the upstream sees the same request.
+    expect(result).toBe(nativeResponse);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://opencode.ai/a",
+      expect.objectContaining({ method: "POST", body: "{}" })
+    );
+    fetchSpy.mockRestore();
+  });
+
+  it("still reports the missing dep when the native replay also fails", async () => {
+    loadRuntimeDepMock.mockRejectedValue(new Error("MODULE_NOT_FOUND"));
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
 
     const { opencodeTlsFetch, OpencodeTlsUnavailableError } = await import(
       "../../open-sse/services/opencodeTlsClient.js"
@@ -73,6 +96,7 @@ describe("opencodeTlsClient", () => {
     await expect(opencodeTlsFetch("https://opencode.ai/a", {})).rejects.toBeInstanceOf(
       OpencodeTlsUnavailableError
     );
+    fetchSpy.mockRestore();
   });
 
   it("forwards the abort signal so a cancelled stream stops upstream", async () => {
