@@ -91,6 +91,10 @@ export function mergeRefreshedCredentials(provider, currentCredentials, refreshe
     next.expiresAt = refreshedCredentials.expiresAt;
   }
 
+  // Only the grant flows that actually surface a token type set this (CodeBuddy
+  // does); every other refresher leaves it undefined and the stored value stays.
+  if (refreshedCredentials.tokenType) next.tokenType = refreshedCredentials.tokenType;
+
   if (refreshedCredentials.projectId) next.projectId = refreshedCredentials.projectId;
 
   if (refreshedCredentials.providerSpecificData) {

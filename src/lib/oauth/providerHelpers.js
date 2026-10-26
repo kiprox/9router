@@ -50,6 +50,52 @@ function extractEmailFromAccessToken(accessToken) {
   return payload.email || payload.preferred_username || payload.sub || undefined;
 }
 
+function pickString(...values) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+/**
+ * Identity claims from a CodeBuddy access token (JWT).
+ *
+ * CodeBuddy hands back a plain JWT with no `userinfo` endpoint on the polling
+ * path, so the token itself is the only source of account identity at login
+ * time. Two consequences if it is ignored:
+ *
+ *  - `createProviderConnection` dedups OAuth rows by email, so an empty email
+ *    means every re-login inserts a fresh "Account N" row instead of rotating
+ *    the tokens of the existing one.
+ *  - the dashboard shows "Account 1/2/3" with no way to tell accounts apart.
+ *
+ * Claim shapes differ per realm: the .ai (intl) token carries `email` and no
+ * nickname, while the CN token carries `nickname` (the account phone) and `sub`
+ * (= CodeBuddy user id, per the protocol notes). Both are handled here so the
+ * callers stay realm-agnostic.
+ *
+ * @param {string} accessToken - JWT access token
+ * @returns {{ email?: string, displayName?: string, userId?: string }}
+ */
+export function extractCodeBuddyAccountInfo(accessToken) {
+  const payload = decodeJwtPayload(accessToken);
+  if (!payload) return {};
+
+  const preferredUsername = pickString(payload.preferred_username);
+  return {
+    // Only accept `preferred_username` as an email when it actually looks like
+    // one — on some realms it is a bare handle, and a bogus email would break
+    // the email-based dedup instead of fixing it.
+    email: pickString(
+      payload.email,
+      payload.upn,
+      preferredUsername?.includes("@") ? preferredUsername : undefined
+    ),
+    displayName: pickString(payload.nickname, payload.name, preferredUsername),
+    userId: pickString(payload.sub, payload.user_id, payload.userId, payload.uid, payload.id),
+  };
+}
+
 /**
  * Remaining lifetime of a JWT access token in seconds, derived from its `exp`
  * claim. Returns null when the token is not a JWT or carries no usable expiry.

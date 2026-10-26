@@ -1,5 +1,5 @@
 import { CODEBUDDY_CONFIG } from "../constants/oauth.js";
-import { getJwtExpiresInSeconds } from "../providerHelpers.js";
+import { getJwtExpiresInSeconds, extractCodeBuddyAccountInfo } from "../providerHelpers.js";
 
 // CodeBuddy (Tencent) - Browser OAuth Polling Flow
 // 1. POST stateUrl → get { state, authUrl }
@@ -70,15 +70,26 @@ const codebuddyCn = {
     if (data.code === 11217) return { ok: true, data: { error: "authorization_pending" } };
     return { ok: false, data: { error: data.msg || "unknown_error" } };
   },
-  mapTokens: (tokens) => ({
-    accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token,
-    // CodeBuddy does not return expires_in — derive the lifetime from the JWT
-    // `exp` claim so proactive refresh fires at the real expiry (see
-    // getJwtExpiresInSeconds). 24h remains the last-resort fallback.
-    expiresIn: tokens.expires_in || getJwtExpiresInSeconds(tokens.access_token) || 86400,
-    providerSpecificData: {},
-  }),
+  mapTokens: (tokens) => {
+    // Same identity extraction as codebuddy-intl: the polling path has no
+    // userinfo endpoint, so the JWT is the only source of email / display name.
+    // CN tokens carry `nickname` (the account phone) instead of `email`.
+    const account = extractCodeBuddyAccountInfo(tokens.access_token);
+    const email = account.email || (account.userId ? `codebuddy-user-${account.userId}` : undefined);
+    const mapped = {
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      // CodeBuddy does not return expires_in — derive the lifetime from the JWT
+      // `exp` claim so proactive refresh fires at the real expiry (see
+      // getJwtExpiresInSeconds). 24h remains the last-resort fallback.
+      expiresIn: tokens.expires_in || getJwtExpiresInSeconds(tokens.access_token) || 86400,
+      tokenType: tokens.token_type || "Bearer",
+    };
+    if (account.userId) mapped.providerSpecificData = { userId: account.userId };
+    if (email) mapped.email = email;
+    if (account.displayName) mapped.displayName = account.displayName;
+    return mapped;
+  },
 };
 
 export default codebuddyCn;

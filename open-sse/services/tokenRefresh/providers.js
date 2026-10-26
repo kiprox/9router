@@ -571,6 +571,9 @@ export async function refreshCodebuddyToken(refreshToken, log) {
       accessToken: data.data.accessToken,
       refreshToken: data.data.refreshToken || refreshToken,
       expiresIn: codebuddyExpiresIn(data.data),
+      // Preserve the grant's token type across refreshes — the refresh response
+      // uses the same { code, data } envelope as the login poll.
+      tokenType: data.data.tokenType,
     };
   }, log);
 }
@@ -622,6 +625,8 @@ export async function refreshCodebuddyIntlToken(refreshToken, log) {
       accessToken: data.data.accessToken,
       refreshToken: data.data.refreshToken || refreshToken,
       expiresIn: codebuddyExpiresIn(data.data),
+      // Same as the CN refresher: keep the upstream token type when present.
+      tokenType: data.data.tokenType,
     };
   }, log);
 }
