@@ -1,34 +1,52 @@
+# syntax=docker/dockerfile:1.7
+ARG NODE_IMAGE=node:22.23.4-alpine
+# CN mirror by default (fork build host); override with --build-arg ALPINE_MIRROR=...
+ARG ALPINE_MIRROR=mirrors.aliyun.com
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+ARG APP_VERSION=unknown
+
 # ==========================================
 # STAGE 1: BUILD
 # ==========================================
-FROM node:22-alpine AS builder
+FROM ${NODE_IMAGE} AS base
+ARG ALPINE_MIRROR
+WORKDIR /app
 
-ENV NPM_CONFIG_UPDATE_NOTIFIER=false
-ENV NEXT_TELEMETRY_DISABLED=1
+RUN if [ "$ALPINE_MIRROR" != "dl-cdn.alpinelinux.org" ]; then \
+      sed -i "s|dl-cdn.alpinelinux.org|${ALPINE_MIRROR}|g" /etc/apk/repositories; \
+    fi
+
+FROM base AS builder
+ARG NPM_REGISTRY
 
 # Mark this as a Docker image — required for Next.js build-time detection of public env var
 ENV NEXT_PUBLIC_APP_IMAGE_SHA=docker
-
-WORKDIR /app
-# CN mirror for apk (used by builder and runner stages)
-RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
 # Gabung jadi satu RUN, kurangi layer & secret mounts
-RUN apk add --no-cache python3 make g++ curl wget git
+RUN apk add --no-cache python3 make g++ linux-headers curl wget git
 
 COPY package.json package-lock.json* ./
-RUN npm ci --no-audit --no-fund
+RUN npm ci --no-audit --no-fund --registry="${NPM_REGISTRY}"
 
 COPY . ./
 RUN npm run build
 
-
 # ==========================================
 # STAGE 2: RUNNER
 # ==========================================
-FROM node:22-alpine AS runner
-
+FROM ${NODE_IMAGE} AS runner
+ARG ALPINE_MIRROR
+ARG APP_VERSION
 WORKDIR /app
+
+RUN if [ "$ALPINE_MIRROR" != "dl-cdn.alpinelinux.org" ]; then \
+      sed -i "s|dl-cdn.alpinelinux.org|${ALPINE_MIRROR}|g" /etc/apk/repositories; \
+    fi
+
+LABEL org.opencontainers.image.title="9router" \
+      org.opencontainers.image.version="${APP_VERSION}"
 
 ENV NODE_ENV=production
 ENV PORT=20128
@@ -37,19 +55,14 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PUBLIC_APP_IMAGE_SHA=docker
 ENV DATA_DIR=/app/data
 
-# curl doubles as the HEALTHCHECK probe; su-exec drops to node at runtime.
-RUN apk add --no-cache curl su-exec && mkdir -p /app/data /app/data-home && \
-  chown -R node:node /app/data /app/data-home && \
-  ln -sf /app/data-home /root/.9router 2>/dev/null || true && \
-  printf '#!/bin/sh\nchown -R node:node /app/data /app/data-home 2>/dev/null\nexec su-exec node "$@"\n' > /entrypoint.sh && \
-  chmod +x /entrypoint.sh
-
 COPY --chown=node:node --from=builder /app/public ./public
 COPY --chown=node:node --from=builder /app/.next/static ./.next/static
 COPY --chown=node:node --from=builder /app/.next/standalone ./
 COPY --chown=node:node --from=builder /app/custom-server.js ./custom-server.js
 COPY --chown=node:node --from=builder /app/open-sse ./open-sse
+# Next file tracing can omit sibling files; MITM runs server.js as a separate process.
 COPY --chown=node:node --from=builder /app/src/mitm ./src/mitm
+# Runtime `@/*` imports outside .next/standalone (DB, shared services).
 COPY --chown=node:node --from=builder /app/src/shared ./src/shared
 COPY --chown=node:node --from=builder /app/src/lib ./src/lib
 
@@ -62,6 +75,16 @@ COPY --chown=node:node --from=builder /app/node_modules/next ./node_modules/next
 COPY --chown=node:node --from=builder /app/node_modules/sql.js ./node_modules/sql.js
 # node-machine-id is createRequire-loaded at runtime; tracing omits it.
 COPY --chown=node:node --from=builder /app/node_modules/node-machine-id ./node_modules/node-machine-id
+
+RUN mkdir -p /app/data /app/data-home && \
+  chown -R node:node /app/data /app/data-home && \
+  ln -sf /app/data-home /root/.9router 2>/dev/null || true
+
+# curl doubles as the HEALTHCHECK probe; su-exec drops to node at runtime; ffmpeg
+# converts audio for the Codex OAuth STT provider.
+RUN apk add --no-cache curl su-exec ffmpeg && \
+  printf '#!/bin/sh\nchown -R node:node /app/data /app/data-home 2>/dev/null\nexec su-exec node "$@"\n' > /entrypoint.sh && \
+  chmod +x /entrypoint.sh
 
 EXPOSE 20128
 

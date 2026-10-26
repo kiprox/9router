@@ -71,12 +71,17 @@ export const ERROR_RULES = [
   // Upstream model produced nothing (cline image models answer `stream:false`
   // with a bare 500 "empty response content"). Report it as-is to the client.
   { text: "empty response",         noFallback: true },
+  // Intl gateway blocks affect the account/IP, so let the connection back off.
+  { provider: "codebuddy-intl", text: "request illegal", backoff: true },
+  { provider: "codebuddy-intl", text: "conversation id missing", backoff: true },
   { text: "no credentials",           cooldownMs: COOLDOWN.long },
   { text: "request not allowed",      cooldownMs: COOLDOWN.short },
   { text: "improperly formed request", cooldownMs: COOLDOWN.long },
   { text: "rate limit",               backoff: true },
   { text: "too many requests",        backoff: true },
   { text: "quota exceeded",           backoff: true },
+  { text: "insufficient credit",      backoff: true },
+  { text: "credit balance is too low", backoff: true },
   { text: "capacity",                 backoff: true },
   { text: "overloaded",               backoff: true },
 

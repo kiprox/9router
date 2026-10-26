@@ -33,6 +33,9 @@ const nextConfig = {
     "node-ssh",
     "open",
     "@aws-sdk/credential-providers",
+    // wreq-js resolves its rust native binding by relative require paths from its own
+    // package dir — bundling breaks those paths ("Failed to load native module").
+    "wreq-js",
   ],
   turbopack: {
     root: tracingRoot

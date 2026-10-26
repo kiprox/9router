@@ -134,11 +134,15 @@ describe("combo quarantine", () => {
     });
 
     const res1 = await run(harness);
-    expect(res1.status).toBe(400); // no fallback for request-scoped errors
+    // A request-scoped 4xx says this member cannot serve THIS request, not that
+    // the credential is unhealthy: the combo advances to the next member (upstream
+    // #4992-era behaviour) and B serves it.
+    expect(res1.status).toBe(200);
+    expect(harness.calls).toEqual(["A", "B"]);
 
     harness.calls.length = 0;
     await run(harness);
-    expect(harness.calls).toEqual(["A"]); // not skipped next time
+    expect(harness.calls).toEqual(["A", "B"]); // A is not quarantined, tried again
     expect(getComboQuarantineState()[COMBO]).toBeUndefined();
   });
 
