@@ -105,6 +105,17 @@ function npmInstall(pkg, version) {
   });
 }
 
+async function installIntoRuntime(pkg, version) {
+  const dir = ensureRuntimeProject();
+  const res = await npmInstall(pkg, version);
+  if (!res.ok) {
+    throw new Error(
+      `${pkg} is missing and the on-demand install failed (${summarizeNpmError(res.stderr)}) — ` +
+      `install it manually: cd "${dir}" && npm install ${pkg}@${version}`
+    );
+  }
+}
+
 const inflight = new Map();
 
 async function load(pkg) {
@@ -116,22 +127,24 @@ async function load(pkg) {
   }
   // 2) Already present in the runtime dir from a previous install.
   const runtimeRequire = createRequire(path.join(getRuntimeDir(), "package.json"));
+  const importFromRuntime = () => runtimeImport(pathToFileURL(runtimeRequire.resolve(pkg)).href);
   try {
-    return await runtimeImport(pathToFileURL(runtimeRequire.resolve(pkg)).href);
+    return await importFromRuntime();
   } catch (error) {
     if (!isModuleMissing(error)) throw error;
   }
   // 3) Download on demand, then import from the runtime dir.
   const version = LAZY_DEP_VERSIONS[pkg] || "latest";
-  const dir = ensureRuntimeProject();
-  const res = await npmInstall(pkg, version);
-  if (!res.ok) {
-    throw new Error(
-      `${pkg} is missing and the on-demand install failed (${summarizeNpmError(res.stderr)}) — ` +
-      `install it manually: cd "${dir}" && npm install ${pkg}@${version}`
-    );
+  await installIntoRuntime(pkg, version);
+  try {
+    return await importFromRuntime();
+  } catch (error) {
+    // npm exits 0 even on partially-extracted installs; wipe and retry once.
+    if (!isModuleMissing(error)) throw error;
+    fs.rmSync(path.join(getRuntimeDir(), "node_modules", pkg), { recursive: true, force: true });
+    await installIntoRuntime(pkg, version);
+    return importFromRuntime();
   }
-  return runtimeImport(pathToFileURL(createRequire(path.join(dir, "package.json")).resolve(pkg)).href);
 }
 
 export function loadRuntimeDep(pkg) {

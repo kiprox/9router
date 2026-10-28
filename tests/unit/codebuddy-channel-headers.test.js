@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import { buildCodeBuddyHeaders } from "../../open-sse/executors/codebuddyHeaders.js";
 import { CodeBuddyExecutor } from "../../open-sse/executors/codebuddy-cn.js";
 import { CodeBuddyIntlExecutor } from "../../open-sse/executors/codebuddy-intl.js";
+import { PROVIDERS } from "../../open-sse/config/providers.js";
+import { getExecutor } from "../../open-sse/executors/index.js";
 
 const UA_CN = "CLI/2.108.1 CodeBuddy/2.108.1";
 const UA_INTL = "IDE/2.108.1 CodeBuddy/2.108.1";
@@ -20,6 +22,15 @@ const build = (overrides = {}) =>
     headers: { "User-Agent": UA_CN },
     ...overrides,
   });
+
+// The executors build the header family themselves (the registry does not
+// register a `codebuddyHeaders` hook), so these assertions go through the real
+// buildHeaders path the gateway sees.
+const CREDS = { accessToken: "TESTTOKEN", apiKey: null };
+
+function executorHeaders(id) {
+  return getExecutor(id).buildHeaders(CREDS, true, PROVIDERS[id].baseUrl, "deepseek-v4.1-flash", {});
+}
 
 describe("CodeBuddy headers: X-IDE-Version", () => {
   it("mirrors the version in the User-Agent", () => {
@@ -80,6 +91,46 @@ describe("CodeBuddy executors wire the UA into the version header", () => {
     expect(headers["User-Agent"]).toBe(ua);
     expect(headers["X-IDE-Version"]).toBe("2.108.1");
   });
+});
+
+describe("CodeBuddy executors: gateway channel ids", () => {
+  // Upstream rejects the call with 400 / 11128 "request illegal" ("failed
+  // channel verification") when the conversation family is missing, so the ids
+  // have to survive the real buildHeaders path — not just the helper.
+  const REQUIRED = [
+    "X-Request-ID",
+    "X-Conversation-ID",
+    "X-Conversation-Request-ID",
+    "X-Conversation-Message-ID",
+  ];
+
+  for (const id of ["codebuddy-intl", "codebuddy-cn"]) {
+    describe(id, () => {
+      it("sends the plugin request/conversation ids", () => {
+        const headers = executorHeaders(id);
+        for (const key of REQUIRED) {
+          expect(typeof headers[key], `${id} must send ${key}`).toBe("string");
+          expect(headers[key].length).toBeGreaterThan(0);
+        }
+      });
+
+      it("keeps the conversation and message ids distinct", () => {
+        const headers = executorHeaders(id);
+        expect(headers["X-Conversation-ID"]).not.toBe(headers["X-Conversation-Message-ID"]);
+      });
+
+      it("still applies the bearer token after the hook runs", () => {
+        expect(executorHeaders(id).Authorization).toBe("Bearer TESTTOKEN");
+      });
+
+      it("issues fresh ids per request", () => {
+        const a = executorHeaders(id);
+        const b = executorHeaders(id);
+        expect(a["X-Request-ID"]).not.toBe(b["X-Request-ID"]);
+        expect(a["X-Conversation-Request-ID"]).not.toBe(b["X-Conversation-Request-ID"]);
+      });
+    });
+  }
 });
 
 describe("CodeBuddy headers: caller header spelling", () => {
