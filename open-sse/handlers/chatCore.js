@@ -62,7 +62,7 @@ export function stripContinuityFields(body) {
 }
 
 /**
- * Decide whether the upstream call must stream.
+ * Decide whether the CLIENT asked for SSE.
  *
  * OpenAI's spec makes `stream` default to false, so an absent key is a
  * non-stream request. Two client-side signals still opt into SSE without the
@@ -71,6 +71,12 @@ export function stripContinuityFields(body) {
  * AI SDK defaults). Clients that cannot parse SSE — a JSON-only Accept, or
  * deepseek-tui's non-interactive `-p` run — are pinned to false *before* those
  * signals are considered.
+ *
+ * Provider capability is deliberately NOT an input. `forceStream` lives in the
+ * registry and handleChatCore ORs it into the separate upstream decision
+ * (`stream = clientStreams || providerRequiresStreaming`) so the forced-SSE→JSON
+ * bridge can run. Feeding it in here made a `stream:false` caller look like an
+ * SSE client: the bridge was skipped and the caller got an SSE body.
  *
  * Exported for unit tests — the decision used to sit inline in handleChatCore,
  * where it could only be exercised through the full request pipeline.
@@ -82,12 +88,10 @@ export function stripContinuityFields(body) {
  * @param {boolean} [opts.jsonOnlyAccept] - Client accepts only application/json
  * @param {boolean} [opts.clientNoStream] - Client cannot parse SSE and sent no
  *   explicit `stream` (deepseek-tui non-interactive run)
- * @param {boolean} [opts.providerRequiresStreaming] - PROVIDERS[provider].forceStream
  * @returns {boolean}
  */
-export function shouldStreamUpstream({ body, sourceFormat, acceptHeader = "", jsonOnlyAccept = false, clientNoStream = false, providerRequiresStreaming = false }) {
-  // Explicit request/provider facts beat every heuristic below.
-  if (providerRequiresStreaming) return true;
+export function shouldStreamUpstream({ body, sourceFormat, acceptHeader = "", jsonOnlyAccept = false, clientNoStream = false }) {
+  // Explicit request facts beat every heuristic below.
   if (body?.stream === true) return true;
   if (body?.stream === false) return false;
 
@@ -515,7 +519,9 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
       provider, model, connectionId,
       latency: { ttft: 0, total: Date.now() - requestStartTime },
       tokens: { prompt_tokens: 0, completion_tokens: 0 },
-      request: extractRequestConfig(body, stream),
+      // Client intent, not the upstream wire: a JSON caller behind a forceStream
+      // provider is still recorded as stream:false, same as the success paths.
+      request: extractRequestConfig(body, clientStreams),
       providerRequest: translatedBody || null,
       response: { error: error.message || String(error), status: error.name === "AbortError" ? 499 : 502, thinking: null },
       pxpipe: pxpipeSummary,
@@ -590,7 +596,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
       provider, model, connectionId,
       latency: { ttft: 0, total: Date.now() - requestStartTime },
       tokens: { prompt_tokens: 0, completion_tokens: 0 },
-      request: extractRequestConfig(body, stream),
+      request: extractRequestConfig(body, clientStreams),
       providerRequest: finalBody || translatedBody || null,
       response: { error: message, status: statusCode, thinking: null },
       pxpipe: pxpipeSummary,

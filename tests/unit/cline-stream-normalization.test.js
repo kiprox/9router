@@ -46,8 +46,11 @@ test("Gemini-family wire formats always stream (their agents cannot parse JSON)"
   }
 });
 
-test("provider forceStream wins; a non-interactive deepseek-tui run still forces JSON", () => {
-  assert.equal(decide({}, { providerRequiresStreaming: true }), true);
+test("a non-interactive deepseek-tui run forces JSON; provider forceStream is not this helper's input", () => {
+  // `forceStream` is the registry's fact about the UPSTREAM; handleChatCore ORs it
+  // into its own `stream` decision. Passing it here made a stream:false caller look
+  // like an SSE client, which is how fusion panels received an unparseable SSE body.
+  assert.equal(decide({}, { providerRequiresStreaming: true }), false);
   // deepseek-tui -p: no explicit stream → JSON, even when Accept claims SSE.
   assert.equal(decide({}, { clientNoStream: true }), false);
   assert.equal(decide({}, { clientNoStream: true, accept: "text/event-stream" }), false);
