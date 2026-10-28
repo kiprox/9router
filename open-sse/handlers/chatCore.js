@@ -228,9 +228,10 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   const quirks = PROVIDERS[provider]?.quirks || {};
   const nonStreamOnlyModel = quirks.nonStreamOnlyModels?.test(model) === true;
 
-  // What the CLIENT gets, and what we ask the UPSTREAM for. They differ when a
-  // provider only serves one variant: the client's wire format is a promise we
-  // keep locally, the upstream request is whatever actually works.
+  // What the CLIENT gets vs what we ask the UPSTREAM for. `forceStream` is not
+  // part of the first decision: folding it in made an explicit `stream:false`
+  // caller look like an SSE client, so handleForcedSSEToJson() below never ran
+  // and the caller received an SSE body (fusion panels then failed to parse it).
   const clientStreams = shouldStreamUpstream({
     body,
     sourceFormat,
@@ -239,9 +240,8 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     jsonOnlyAccept: acceptHeader.includes("application/json") && !acceptHeader.includes("text/event-stream"),
     // A deepseek-tui non-interactive run (-p) sends no `stream` and cannot parse SSE.
     clientNoStream: detectedTool === "deepseek-tui",
-    providerRequiresStreaming,
   });
-  let stream = clientStreams && !nonStreamOnlyModel;
+  let stream = (clientStreams || providerRequiresStreaming) && !nonStreamOnlyModel;
 
   // Image generation models require non-streaming (Google v1internal:generateContent)
   const modelType = getModelType(alias, model);
@@ -622,14 +622,11 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     if (result) { streamController.handleComplete(); return result; }
   }
 
-  // The client asked for SSE but this model only answers the JSON variant: read
-  // the completion and re-emit it as SSE. Same handler as the true stream path —
-  // it re-encodes an application/json body from an upstream that ignored
-  // `stream`, and a non-JSON answer becomes an honest 502 instead of an empty
-  // stream. Scoped to `nonStreamOnlyModel` so a provider that pins image
-  // generation to a non-stream endpoint (antigravity/gemini-cli) keeps returning
-  // the JSON body it always has.
-  if (stream || (clientStreams && nonStreamOnlyModel)) {
+  // The client asked for SSE: either pass the stream through, or — when the model
+  // only answers the JSON variant (nonStreamOnlyModel) — re-encode that body as
+  // SSE. A JSON client behind a forceStream provider never reaches this branch:
+  // the forced-SSE→JSON path above already returned a completion for it.
+  if (clientStreams) {
     const { onStreamComplete, streamDetailId } = buildOnStreamComplete({ ...sharedCtx, stream: clientStreams });
     return handleStreamingResponse({ ...sharedCtx, providerResponse, sourceFormat, targetFormat: providerResponseFormat, userAgent, reqLogger, toolNameMap, customToolNames, streamController, onStreamComplete, streamDetailId, credentials });
   }
