@@ -357,21 +357,11 @@ export default function Sidebar({ onClose }) {
           </div>
         </nav>
 
-        {/* Footer section */}
-        <div className="p-3 border-t border-border-subtle">
-          {!isDockerImage && (
-            /* Shutdown button */
-            <Button
-              variant="outline"
-              fullWidth
-              icon="power_settings_new"
-              onClick={() => setShowShutdownModal(true)}
-              className="text-red-500 border-red-200 hover:bg-red-50 hover:border-red-300"
-            >
-              Shutdown
-            </Button>
-          )}
-        </div>
+        {/* Footer section intentionally empty: the shutdown action moved to the
+            header popup and the profile page in the dashboard menu refactor. The
+            old button called a setter this component no longer declares
+            (`setShowShutdownModal`), so clicking it threw a ReferenceError. */}
+
       </aside>
 
       {/* Remote Promo Modal */}
@@ -470,7 +460,7 @@ function ManualUpdatePanel({ latestVersion, installCmd, copied, onCopyAndShutdow
 </div>
           )}
           {/* Docker image update notice */}
-          {isDockerImage && imageSha && (
+          {APP_CONFIG.isDockerImage && APP_CONFIG.imageSha && (
             <div className="flex flex-col gap-1 rounded p-1 -m-1">
               <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
                 Docker image update: pull new image

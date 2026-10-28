@@ -1,4 +1,5 @@
 import { KIRO_CONFIG, assertValidAwsRegion } from "../constants/oauth.js";
+import { safeErrorText } from "../utils/sanitizeError.js";
 
 /**
  * Kiro OAuth Service

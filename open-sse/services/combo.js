@@ -33,6 +33,7 @@ async function peekComboResponse(result, log) {
 
 // Hard capabilities = input modalities; missing one drops request data (e.g. image
 // stripped). Must be prioritized. Soft (e.g. search) only degrades a feature.
+const HARD_CAPS = new Set(["vision", "pdf", "audioInput", "videoInput"]);
 
 // Prefixes used when flattening tool turns into plain prose for panel models.
 const TOOL_CALL_PREFIX = "[Called tools: ";

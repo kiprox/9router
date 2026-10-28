@@ -7,6 +7,7 @@ import ChangelogModal from "./ChangelogModal";
 import NineRemotePromoModal from "./NineRemotePromoModal";
 import LanguageSwitcher from "./LanguageSwitcher";
 import { ConfirmModal } from "./Modal";
+import { LOCALE_COOKIE, normalizeLocale } from "@/i18n/config";
 
 const LOCALE_INFO = {
   "en": { name: "English", flag: "🇺🇸" },
