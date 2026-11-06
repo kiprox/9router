@@ -479,6 +479,28 @@ PROVIDER_CAPABILITIES["qoder"] = {
 // Qoder CN serves the identical model catalog from the CN gateway, so it shares
 // the intl Qoder capability table verbatim (vision/reasoning/contextWindow).
 PROVIDER_CAPABILITIES["qoder-cn"] = PROVIDER_CAPABILITIES["qoder"];
+// The intl CodeBuddy gateway serves the same unified OpenAI-compatible catalog
+// as CN (every model takes OpenAI-style reasoning_effort — see the registry's
+// thinkingFormat), so it shares the CN table. Without this alias both providers
+// fell through to the generic PATTERN_CAPABILITIES rows, which describe the
+// VENDOR APIs: glm-5.2 resolved to the binary zai shape (picker offered only
+// none|thinking and "thinking" emitted no reasoning_effort at all),
+// deepseek/kimi resolved to their native formats, and the missing `vision: true`
+// made chatCore strip every image before the request left 9router.
+//
+// A spread (not a reference) is deliberate: the intl catalog still lists ids CN
+// dropped, and Object.assign onto a shared reference would leak them into CN.
+// Those intl-only ids carry the limits they already resolved to via the vendor
+// globs, so nothing regresses — only thinkingFormat is corrected to "openai",
+// the one fact the whole gateway catalog shares.
+PROVIDER_CAPABILITIES["codebuddy-intl"] = {
+  ...PROVIDER_CAPABILITIES["codebuddy-cn"],
+  "glm-5.0-turbo": { vision: true, reasoning: true, thinkingFormat: "openai", contextWindow: 200000, maxOutput: 128000 },
+  "glm-5v-turbo":  { vision: true, reasoning: true, thinkingFormat: "openai", contextWindow: 200000, maxOutput: 128000 },
+  "minimax-m2.7":  { vision: true, reasoning: true, thinkingFormat: "openai", contextWindow: 204800, maxOutput: 131072 },
+  "kimi-k2.6":     { vision: true, reasoning: true, thinkingFormat: "openai", contextWindow: 262144, maxOutput: 262144 },
+  "kimi-k2.7":     { vision: true, reasoning: true, thinkingFormat: "openai", contextWindow: 262144, maxOutput: 262144 },
+};
 PROVIDER_CAPABILITIES.cx = PROVIDER_CAPABILITIES.codex;
 PROVIDER_CAPABILITIES.dv = PROVIDER_CAPABILITIES["devin-cli"];
 PROVIDER_CAPABILITIES.devin = PROVIDER_CAPABILITIES["devin-cli"];

@@ -5,6 +5,24 @@ import {
   shouldRefreshCredentials,
 } from "../services/oauthCredentialManager.js";
 
+// Identity the official IDE opens the conversation with. The gateway only checks
+// that a system prompt EXISTS at index 0 (11128 "first message is not system
+// prompt"), but this exact value is the one proven against the live gate, so it
+// stays the anchor and the caller's own prompt is appended behind it.
+const INTL_SYSTEM_PROMPT = "You are CodeBuddy Code.";
+
+// Content may be a string or typed blocks ([{type:"text",text}]) depending on the
+// client format; the gateway needs a flat string for the merged system message.
+function flattenContent(content) {
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((block) => (block && typeof block.text === "string" ? block.text : ""))
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
 /**
  * CodeBuddyIntlExecutor — talks to https://www.codebuddy.ai/v2/chat/completions
  *
@@ -31,16 +49,30 @@ export class CodeBuddyIntlExecutor extends DefaultExecutor {
 
     // CodeBuddy rejects plain OpenAI shape (11101 invalid request): needs a
     // leading system prompt + user content as typed blocks, not a bare string.
+    // The leading system prompt is REQUIRED (else 11128 "first message is not
+    // system prompt") but must not REPLACE the caller's own — overwriting the
+    // array dropped every instruction the client sent. The gateway wants exactly
+    // one system message at index 0, so the caller's prompts fold into it.
     const source = Array.isArray(transformed.messages) ? transformed.messages : [];
-    transformed.messages = [{ role: "system", content: "You are CodeBuddy Code." }];
+    const systemParts = [];
+    const conversation = [];
     for (const message of source) {
-      if (!message || typeof message !== "object" || ["system", "developer"].includes(message.role)) continue;
+      if (!message || typeof message !== "object") continue;
+      if (["system", "developer"].includes(message.role)) {
+        const text = flattenContent(message.content);
+        if (text) systemParts.push(text);
+        continue;
+      }
       if (message.role === "user" && typeof message.content === "string") {
-        transformed.messages.push({ ...message, content: [{ type: "text", text: message.content }] });
+        conversation.push({ ...message, content: [{ type: "text", text: message.content }] });
       } else {
-        transformed.messages.push({ ...message });
+        conversation.push({ ...message });
       }
     }
+    transformed.messages = [
+      { role: "system", content: [INTL_SYSTEM_PROMPT, ...systemParts].join("\n\n") },
+      ...conversation,
+    ];
 
     return transformed;
   }

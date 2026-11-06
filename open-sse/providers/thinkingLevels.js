@@ -63,11 +63,15 @@ const PATTERN_THINKING = [
   // DeepSeek v4.* (Alibaba MaaS, probed live): effort low|medium|high|xhigh|max
   // all 200 via output_config.effort; "none" is a 400 on the anthropic route
   // (disable thinking instead). none kept for the picker = disable.
-  // ⚠️ The codebuddy-cn exact ids below MUST stay above this unqualified glob —
-  // PATTERN_THINKING is first-match-wins, so a later provider-qualified entry
-  // would never fire for dotted ids like deepseek-v4.1-flash.
+  // ⚠️ The codebuddy-cn/intl exact ids below MUST stay above this unqualified
+  // glob — PATTERN_THINKING is first-match-wins, so a later provider-qualified
+  // entry would never fire for dotted ids like deepseek-v4.1-flash.
   { provider: "codebuddy-cn", pattern: "deepseek-v4-pro",     levels: ["low", "high", "xhigh"] },
   { provider: "codebuddy-cn", pattern: "deepseek-v4.1-flash", levels: ["low", "high", "max"] },
+  // Same gateway catalog on the intl lane; v4.1-flash moved to low|high|max in
+  // the 2026-09-30 snapshot (see capabilities.js).
+  { provider: "codebuddy-intl", pattern: "deepseek-v4-pro",     levels: ["low", "high", "xhigh"] },
+  { provider: "codebuddy-intl", pattern: "deepseek-v4.1-flash", levels: ["low", "high", "max"] },
   // OpenCode Zen free tier (oc / ocz) — the free id of the same v4.1-flash model
   // publishes low|high|max as well, and unlike DeepSeek's own API the upstream
   // forwards the level verbatim (no low→high collapse). The generic
@@ -82,14 +86,21 @@ const PATTERN_THINKING = [
   // clamped, so the declared set stays authoritative for the picker. Models
   // that publish no supportedEfforts (glm-5.1 / kimi-k3-1 / minimax-m3)
   // fall through to the openai format default.
-  { provider: "codebuddy-cn", pattern: "glm-5.3",      levels: ["low", "high", "max"] },
-  { provider: "codebuddy-cn", pattern: "glm-5.3-flash", levels: ["low", "high", "max"] },
-  { provider: "codebuddy-cn", pattern: "glm-5.2",      levels: ["high", "xhigh"] },
-  { provider: "codebuddy-cn", pattern: "kimi-k2.8-preview",  levels: ["low", "medium", "high"] },
-  { provider: "codebuddy-cn", pattern: "hy3",          levels: ["low", "high"] },
-  { provider: "codebuddy-cn", pattern: "hy4-preview",  levels: ["high"] },
-  // codebuddy-intl rides the same gateway catalog, so its deepseek levels match.
-  { provider: "codebuddy-intl", pattern: "deepseek-v4*", levels: ["low", "high", "xhigh"] },
+  //
+  // ⚠️ codebuddy-intl rides the same gateway catalog and needs the SAME rows.
+  // A provider-qualified pattern only matches its own provider, so sharing the
+  // capability table (capabilities.js) is not enough — intl would keep falling
+  // through to the generic vendor globs above (*glm-5.2* → zai → none|thinking).
+  ...[
+    ["glm-5.3", ["low", "high", "max"]],
+    ["glm-5.3-flash", ["low", "high", "max"]],
+    ["glm-5.2", ["high", "xhigh"]],
+    ["kimi-k2.8-preview", ["low", "medium", "high"]],
+    ["hy3", ["low", "high"]],
+    ["hy4-preview", ["high"]],
+  ].flatMap(([pattern, levels]) =>
+    ["codebuddy-cn", "codebuddy-intl"].map((provider) => ({ provider, pattern, levels }))
+  ),
   // MiniMax Code (mcode) — adaptive effort via output_config.effort. M3.1
   // always thinks (no none); M3 is switchable with none/high only, per the
   // magpie static catalog. M2.7 pair falls through to the claude-adaptive
