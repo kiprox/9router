@@ -1,11 +1,13 @@
-// The lazy runtime loader is the one path that must survive webpack. Both of
-// its resolution steps used to be rewritten at build time, so the Docker /
+// The lazy runtime loader is the one path that must survive webpack. Every step
+// that names a module at build time used to be rewritten, so the Docker /
 // standalone image threw `Cannot read properties of undefined (reading
 // 'resolve')` on every OpenCode free-tier request while `npm run dev` worked:
 //
-//   1. `createRequire(<computed>)` -> `/* createRequire() */ undefined`
+//   1. a static `node:module` import is stubbed by the server bundler, so
+//      `createRequire` must be fetched with a runtime import instead
+//   2. `createRequire(<computed>)` -> `/* createRequire() */ undefined`
 //      (CommonJsImportsParserPlugin, because the argument is not a literal)
-//   2. `import(<computed>)` -> webpackEmptyAsyncContext, which always throws
+//   3. `import(<computed>)` -> webpackEmptyAsyncContext, which always throws
 //      MODULE_NOT_FOUND, so a runtime-dir install could never be loaded.
 //
 // These tests read the emitted bundle when one exists (post-build) and always
@@ -25,23 +27,23 @@ const code = source
   .replace(/^\s*\/\/.*$/gm, "");
 
 describe("lazyRuntime bundler hardening (source)", () => {
-  it("never imports createRequire as a named binding", () => {
-    // webpack rewrites a named `createRequire(...)` call into
-    // `/* createRequire() */ undefined`; the alias below cannot be rewritten.
-    expect(code).not.toMatch(/import\s*\{[^}]*\bcreateRequire\b[^}]*\}\s*from\s*["']node:module["']/);
+  it("never imports node:module statically", () => {
+    // A static import of the builtin is stubbed by the server bundler, which is
+    // what left createRequire undefined in the first place.
+    expect(code).not.toMatch(/(?:import\s[^;]*?from\s*|import\s*\(\s*)["']node:module["']/);
   });
 
-  it("takes createRequire off the node:module default binding", () => {
-    expect(code).toMatch(/import\s+nodeModule\s+from\s+["']node:module["']/);
-    expect(code).toMatch(/const\s+createRequire\s*=\s*nodeModule\.createRequire/);
-  });
-
-  it("routes every dynamic import through one webpackIgnore helper", () => {
-    const helper = code.match(/const\s+runtimeImport\s*=[^;]*webpackIgnore[^;]*;/);
+  it("fetches createRequire from a runtime node:module import", () => {
+    const helper = code.match(/getCreateRequire\s*\(\)\s*\{[\s\S]*?\n\}/);
     expect(helper).toBeTruthy();
-    // Any other `import(` would be compiled to an empty async context again.
-    const others = code.replace(helper[0], "").match(/[^.\w]import\s*\(/g) || [];
-    expect(others).toHaveLength(0);
+    expect(helper[0]).toMatch(/webpackIgnore/);
+    expect(helper[0]).toMatch(/["']node:module["']/);
+  });
+
+  it("routes every dynamic import through webpackIgnore", () => {
+    // Any bare `import(` would be compiled to an empty async context again.
+    const imports = code.match(/[^.\w]import\s*\((?!\s*\/\*\s*webpackIgnore)/g) || [];
+    expect(imports).toHaveLength(0);
   });
 });
 

@@ -8,23 +8,20 @@
 // Never throws at import time of THIS module — failures surface from
 // loadRuntimeDep() with a manual-install hint.
 //
-// Webpack hardening (both needed, the bundler rewrites the obvious forms):
-//   - `createRequire(...)` called directly is statically rewritten by
-//     CommonJsImportsParserPlugin into `/* createRequire() */ undefined`
-//     because its argument is computed, so every resolve() threw
-//     "Cannot read properties of undefined (reading 'resolve')" in the
-//     standalone/Docker build while dev worked. Pulling the function off the
-//     `node:module` default binding leaves a plain member expression webpack
-//     does not touch.
+// Webpack hardening (the server bundler rewrites every obvious form):
+//   - a static `node:module` import is stubbed, so `createRequire` is fetched
+//     with a runtime import instead (getCreateRequire below). Called directly,
+//     `createRequire(<computed>)` is additionally rewritten by
+//     CommonJsImportsParserPlugin into `/* createRequire() */ undefined`, so
+//     every resolve() threw "Cannot read properties of undefined (reading
+//     'resolve')" in the standalone/Docker build while dev worked.
 //   - `import(<computed>)` becomes a webpackEmptyAsyncContext that always
-//     throws MODULE_NOT_FOUND, so runtime-dir loads could never succeed.
-//     Funnel it through one `webpackIgnore` helper so the specifier stays a
-//     real runtime import.
+//     throws MODULE_NOT_FOUND, so runtime-dir loads could never succeed; every
+//     runtime import below carries `webpackIgnore: true` for that reason.
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import nodeModule from "node:module";
 import { pathToFileURL } from "node:url";
 import { getWritableDataDir } from "../utils/writableDataDir.js";
 
@@ -34,36 +31,16 @@ const LAZY_DEP_VERSIONS = {
   "wreq-js": "^3.2.0",
 };
 
-// Member expression off the builtin's default export: not rewritten by webpack.
-const createRequire = nodeModule.createRequire;
-
-// Real runtime import (specifier is only known at call time). Keeping this in
-// one place stops the bundler from turning it into an empty async context.
-const runtimeImport = (specifier) => import(/* webpackIgnore: true */ specifier);
-
 function getRuntimeDir() {
   return path.join(getWritableDataDir(), "runtime");
 }
 
-// npm resolves the project root by walking UP from cwd until it finds a
-// package.json. DATA_DIR (/app/data) sits inside the app tree, so without its
-// own package.json the runtime dir inherits /app/package.json: npm installs
-// into /app/node_modules and rewrites the app's dependencies. In the Docker
-// image /app is root-owned while the server runs as `node`, which surfaced as
-// "EACCES: mkdir '/app/node_modules'" and left the optional dep uninstallable.
-function ensureRuntimeProject() {
-  const dir = getRuntimeDir();
-  fs.mkdirSync(dir, { recursive: true });
-  const pkgPath = path.join(dir, "package.json");
-  if (!fs.existsSync(pkgPath)) {
-    fs.writeFileSync(pkgPath, JSON.stringify({
-      name: "9router-runtime",
-      version: "1.0.0",
-      private: true,
-      description: "User-writable runtime deps (playwright-core, wreq-js) installed on demand",
-    }, null, 2));
-  }
-  return dir;
+// A static node:module import gets stubbed by the server bundler, so
+// createRequire must be fetched at runtime for published builds to work.
+let createRequirePromise;
+function getCreateRequire() {
+  createRequirePromise ??= import(/* webpackIgnore: true */ "node:module").then((mod) => mod.createRequire);
+  return createRequirePromise;
 }
 
 function isModuleMissing(error) {
@@ -71,10 +48,10 @@ function isModuleMissing(error) {
   return code === "MODULE_NOT_FOUND" || code === "ERR_MODULE_NOT_FOUND";
 }
 
-// npm 7+ prints `npm ERR!`, npm 11+ switched to `npm error`. The old regex only
-// matched the former, so on modern npm every failure fell through to "the last
-// line", which is the debug-log pointer — the real cause (EACCES, ENOTFOUND,
-// ETARGET) was thrown away. Skip that pointer and surface the first meaningful
+// npm 7+ prints `npm ERR!`, npm 11+ switched to `npm error`. Matching only the
+// former left every modern-npm failure falling through to "the last line",
+// which is the debug-log pointer — the real cause (EACCES, ENOTFOUND, ETARGET)
+// was thrown away. Skip that pointer and surface the first meaningful
 // diagnostic instead.
 function summarizeNpmError(stderr = "") {
   const lines = String(stderr)
@@ -93,7 +70,13 @@ function summarizeNpmError(stderr = "") {
 }
 
 function npmInstall(pkg, version) {
-  const cwd = ensureRuntimeProject();
+  const cwd = getRuntimeDir();
+  fs.mkdirSync(cwd, { recursive: true });
+  // Anchor npm to the runtime dir so it can't adopt a parent package.json as install root.
+  const manifest = path.join(cwd, "package.json");
+  if (!fs.existsSync(manifest)) {
+    fs.writeFileSync(manifest, JSON.stringify({ name: "9router-runtime", private: true }, null, 2));
+  }
   const npm = process.platform === "win32" ? "npm.cmd" : "npm";
   const args = ["install", "--no-audit", "--no-fund", "--prefer-online", `${pkg}@${version}`];
   return new Promise((resolve) => {
@@ -106,7 +89,7 @@ function npmInstall(pkg, version) {
 }
 
 async function installIntoRuntime(pkg, version) {
-  const dir = ensureRuntimeProject();
+  const dir = getRuntimeDir();
   const res = await npmInstall(pkg, version);
   if (!res.ok) {
     throw new Error(
@@ -118,32 +101,59 @@ async function installIntoRuntime(pkg, version) {
 
 const inflight = new Map();
 
+// createRequire.resolve applies the CJS "require" condition, which returns the
+// CJS entry for packages that ship both (playwright-core: require→index.js,
+// import→index.mjs). Prefer the ESM entry so named exports survive the file-URL
+// import below.
+function resolveRuntimeEntry(runtimeRequire, pkg) {
+  try {
+    return runtimeRequire.resolve(pkg, { conditions: ["import"] });
+  } catch {
+    return runtimeRequire.resolve(pkg);
+  }
+}
+
+// Importing a CJS entry via file URL bypasses the exports map, and
+// cjs-module-lexer cannot detect named exports through chained re-exports
+// (`module.exports = require('./coreBundle').inprocess.playwright`), so
+// consumers destructuring `{ chromium }` get undefined. Merge `default`'s
+// own properties as a fallback.
+function unwrapCjsNamespace(mod) {
+  if (mod?.default && typeof mod.default === "object") {
+    return { ...mod.default, ...mod };
+  }
+  return mod;
+}
+
 async function load(pkg) {
   // 1) Resolvable from the app install (dev machine / traced standalone).
   try {
-    return await runtimeImport(pkg);
+    return await import(/* webpackIgnore: true */ /* @vite-ignore */ pkg);
   } catch (error) {
     if (!isModuleMissing(error)) throw error;
   }
   // 2) Already present in the runtime dir from a previous install.
+  const createRequire = await getCreateRequire();
   const runtimeRequire = createRequire(path.join(getRuntimeDir(), "package.json"));
-  const importFromRuntime = () => runtimeImport(pathToFileURL(runtimeRequire.resolve(pkg)).href);
   try {
-    return await importFromRuntime();
+    const entry = resolveRuntimeEntry(runtimeRequire, pkg);
+    return unwrapCjsNamespace(await import(/* webpackIgnore: true */ /* @vite-ignore */ pathToFileURL(entry).href));
   } catch (error) {
     if (!isModuleMissing(error)) throw error;
   }
   // 3) Download on demand, then import from the runtime dir.
   const version = LAZY_DEP_VERSIONS[pkg] || "latest";
+  const runtimeImport = async () =>
+    unwrapCjsNamespace(await import(/* webpackIgnore: true */ /* @vite-ignore */ pathToFileURL(resolveRuntimeEntry(runtimeRequire, pkg)).href));
   await installIntoRuntime(pkg, version);
   try {
-    return await importFromRuntime();
+    return await runtimeImport();
   } catch (error) {
     // npm exits 0 even on partially-extracted installs; wipe and retry once.
     if (!isModuleMissing(error)) throw error;
     fs.rmSync(path.join(getRuntimeDir(), "node_modules", pkg), { recursive: true, force: true });
     await installIntoRuntime(pkg, version);
-    return importFromRuntime();
+    return runtimeImport();
   }
 }
 
