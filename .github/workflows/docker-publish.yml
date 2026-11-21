@@ -42,10 +42,14 @@ jobs:
           images: |
             ${{ env.GHCR_IMAGE }}
             ${{ env.DOCKERHUB_IMAGE }}
+          # `main` is the branch we actually ship (see AGENTS.md); the GitHub
+          # default branch is still `master` on the old 0.4.52 line. Using
+          # is_default_branch here would tag that stale code as stable/latest
+          # on a manual dispatch, so gate on the shipping ref explicitly.
           tags: |
             type=semver,pattern={{version}}
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=stable,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=stable,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
